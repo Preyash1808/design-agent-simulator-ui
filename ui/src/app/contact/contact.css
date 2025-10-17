@@ -1,0 +1,15 @@
+.contact-wrap { display: grid; gap: 18px; }
+.contact-title { font-size: 30px; font-weight: 900; letter-spacing: .3px; margin: 0; background: linear-gradient(90deg, #e5e7eb, #9ca3af); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.contact-grid { display: grid; grid-template-columns: 1.2fr .9fr; gap: 18px; }
+.contact-panel { background: linear-gradient(180deg, rgba(16,22,30,.92), rgba(13,18,25,.92)); border: 1px solid var(--border); padding: 18px; box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 24px 60px rgba(0,0,0,0.35); }
+.contact-card { position: relative; overflow: hidden; background: radial-gradient(120% 140% at 70% 20%, rgba(94,234,212,.25), rgba(0,0,0,0) 40%), linear-gradient(180deg, rgba(16,22,30,.92), rgba(13,18,25,.92)); border: 1px solid var(--border); padding: 18px; box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 24px 60px rgba(0,0,0,0.35); }
+.contact-card-header { display: flex; align-items: center; gap: 10px; }
+.contact-logo { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 900; background: linear-gradient(135deg, #10b981, #84cc16); color: #0b0f14; }
+.contact-brand { font-weight: 900; letter-spacing: .3px; }
+.contact-quote { margin-top: 12px; font-weight: 700; line-height: 1.45; color: #e5e7eb; }
+.contact-quote-sub { margin-top: 8px; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 900px) {
+  .contact-grid { grid-template-columns: 1fr; }
+}
+

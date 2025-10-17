@@ -1,0 +1,18 @@
+# Exclude large/local-only directories
+.git
+.gitignore
+.env
+*.pyc
+__pycache__/
+.venv/
+
+# Local artifacts
+logs/
+runs/
+figma_screens/
+
+# Frontend (not needed in backend image)
+ui/
+
+# OS
+.DS_Store

@@ -1,0 +1,38 @@
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Next.js build
+.next/
+ui/.next/
+
+# Env
+.env
+.env.example
+env.example
+ui/.env.local
+ui/.env.example
+ui/env.example
+
+# OS
+.DS_Store
+
+figma_screens/
+logs/
+.vercel/
+runs/
+.venv/
+.env
+__pycache__/
+*.pyc
+
+*.so
+*.whl
+venv/
+__pycache__/
+*.pyc
+
+
+# Ignore local report samples and local logo experiments
+sample_report.pdf

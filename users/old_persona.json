@@ -1,0 +1,332 @@
+[
+  {
+    "id": 1,
+    "name": "Amina Khan",
+    "bio": "Amina Khan, age 22, is a student in Pakistan. She enjoys exploring new apps and social experiences.",
+    "country": "Pakistan",
+    "job": "student",
+    "age_range": [
+      18,
+      25
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.9,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.3,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.8,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.5,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.4,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 2,
+    "name": "John Müller",
+    "bio": "John Müller, age 38, works as a logistics manager in Germany. He values structure and reliability in apps.",
+    "country": "Germany",
+    "job": "logistics manager",
+    "age_range": [
+      35,
+      44
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.2,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.9,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.5,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.6,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.3,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 3,
+    "name": "Lucía Fernández",
+    "bio": "Lucía Fernández, age 29, is a single mother in Argentina. She prefers apps that are supportive and easy to use.",
+    "country": "Argentina",
+    "job": "single mother",
+    "age_range": [
+      25,
+      34
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.5,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.6,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.4,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.9,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.8,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 4,
+    "name": "Takeshi Sato",
+    "bio": "Takeshi Sato, age 47, is a software architect in Japan. He enjoys creative apps but prefers clarity and control.",
+    "country": "Japan",
+    "job": "software architect",
+    "age_range": [
+      45,
+      54
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.85,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.7,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.2,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.5,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.4,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 5,
+    "name": "Fatima Ali",
+    "bio": "Fatima Ali, age 33, is a homemaker in Egypt. She prefers apps that are simple, safe, and family-oriented.",
+    "country": "Egypt",
+    "job": "homemaker",
+    "age_range": [
+      25,
+      34
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.3,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.6,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.4,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.8,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.5,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 6,
+    "name": "Michael Johnson",
+    "bio": "Michael Johnson, age 65, is a retired teacher in USA. He looks for straightforward and reliable app experiences.",
+    "country": "USA",
+    "job": "retired teacher",
+    "age_range": [
+      55,
+      70
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.5,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.5,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.5,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.5,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.5,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 7,
+    "name": "Priya Sharma",
+    "bio": "Priya Sharma, age 19, is a college student in India. She enjoys experimenting with apps but dislikes too much guidance.",
+    "country": "India",
+    "job": "college student",
+    "age_range": [
+      18,
+      25
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.95,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.2,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.6,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.3,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.4,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 8,
+    "name": "David Chen",
+    "bio": "David Chen, age 42, is a small business owner in Singapore. He prefers efficiency and apps that support multitasking.",
+    "country": "Singapore",
+    "job": "small business owner",
+    "age_range": [
+      35,
+      44
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.6,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.85,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.5,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.6,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.3,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 9,
+    "name": "Anna Petrova",
+    "bio": "Anna Petrova, age 55, is a nurse in Russia. She values security and reassurance in app interactions.",
+    "country": "Russia",
+    "job": "nurse",
+    "age_range": [
+      55,
+      70
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.4,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.7,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.3,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.5,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.9,
+        "description": "Neuroticism."
+      }
+    }
+  },
+  {
+    "id": 10,
+    "name": "Kwame Mensah",
+    "bio": "Kwame Mensah, age 30, is a farmer in Ghana. He prefers straightforward apps with clear navigation.",
+    "country": "Ghana",
+    "job": "farmer",
+    "age_range": [
+      25,
+      34
+    ],
+    "ocean": {
+      "O": {
+        "value": 0.2,
+        "description": "Openness to experience."
+      },
+      "C": {
+        "value": 0.5,
+        "description": "Conscientiousness."
+      },
+      "E": {
+        "value": 0.8,
+        "description": "Extraversion."
+      },
+      "A": {
+        "value": 0.6,
+        "description": "Agreeableness."
+      },
+      "N": {
+        "value": 0.4,
+        "description": "Neuroticism."
+      }
+    }
+  }
+]
