@@ -106,6 +106,7 @@ export default function ReportsPage() {
   const [personaLoading, setPersonaLoading] = useState(true);
   const [personaError, setPersonaError] = useState<string | null>(null);
   const [openPersonaId, setOpenPersonaId] = useState<string | null>(null);
+  const [personaModalTab, setPersonaModalTab] = useState<'think-aloud' | 'emotion' | 'path' | 'what-if'>('think-aloud');
   const [personaDetail, setPersonaDetail] = useState<any | null>(null);
   const [personaDetailLoading, setPersonaDetailLoading] = useState(false);
   const [selectedBacktrack, setSelectedBacktrack] = useState<{ name: string; count: number } | null>(null);
@@ -1970,167 +1971,52 @@ export default function ReportsPage() {
             <>
               <div className="tile">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h4 style={{ margin: 0 }}>Persona Cards</h4>
-                  <div role="tablist" aria-label="Density" style={{ position: 'relative', display: 'inline-grid', gridTemplateColumns: '1fr 1fr', border: '1px solid var(--border)', borderRadius: 999, overflow: 'hidden' }}>
-                    <span aria-hidden style={{ position: 'absolute', top: 2, bottom: 2, left: (personaDensity==='comfortable' ? 2 : '50%'), width: 'calc(50% - 4px)', background: 'linear-gradient(180deg, rgba(59,130,246,0.25), rgba(59,130,246,0.12))', borderRadius: 999, transition: 'left .18s ease' }} />
-                    <button role="tab" aria-selected={personaDensity==='comfortable'} onClick={()=>setPersonaDensity('comfortable')} style={{ padding: '6px 14px', background: 'transparent', border: 'none', color: '#e5e7eb', cursor: 'pointer', zIndex: 1, fontSize: 12 }}>Comfortable</button>
-                    <button role="tab" aria-selected={personaDensity==='compact'} onClick={()=>setPersonaDensity('compact')} style={{ padding: '6px 14px', background: 'transparent', border: 'none', color: '#e5e7eb', cursor: 'pointer', zIndex: 1, fontSize: 12 }}>Compact</button>
-                  </div>
+                  <h4 style={{ margin: 0 }}>Persona</h4>
                 </div>
                 {personaLoading && <div className="muted" style={{ marginTop: 8 }}>Loading personas…</div>}
                 {personaError && <div className="muted" style={{ marginTop: 8, color: '#fca5a5' }}>{personaError}</div>}
                 {!personaLoading && personaCards.length === 0 && <div className="muted" style={{ marginTop: 8 }}>No personas found</div>}
                 {personaCards.length > 0 && (
                   <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: (personaDensity==='compact'?10:16), marginTop: 12 }}>
+                  <div className="persona-grid" style={{ marginTop: 12 }}>
                     {personaCards.map((p) => {
                       console.log('Rendering persona card:', p);
                       return (
                       <button key={p.persona_id}
                         onClick={(e) => { e.stopPropagation(); setOpenPersonaId(p.persona_id); loadPersonaDetail(String(runQuery || lastRequested), p.persona_id); }}
-                        style={{ 
-                          textAlign: 'left' as any, 
-                          border: '1px solid var(--border)', 
-                          background: 'linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))', 
-                          color: '#e5e7eb', 
-                          borderRadius: (personaDensity==='compact'?10:12), 
-                          padding: (personaDensity==='compact'?'12px 14px':'16px 18px'), 
-                          cursor: 'pointer', 
-                          boxShadow: '0 6px 22px rgba(0,0,0,0.28)',
-                          transition: 'all 0.2s ease',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          backdropFilter: 'saturate(120%) blur(6px)',
-                          WebkitBackdropFilter: 'saturate(120%) blur(6px)'
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget.style as any).boxShadow = '0 10px 28px rgba(0,0,0,0.38)';
-                          (e.currentTarget.style as any).transform = 'translateY(-1px)';
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget.style as any).boxShadow = '0 6px 22px rgba(0,0,0,0.28)';
-                          (e.currentTarget.style as any).transform = 'translateY(0)';
-                        }}>
-                        <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                          {/* subtle top highlight sweep */}
-                          <span style={{ position: 'absolute', left: -40, right: -40, top: -20, height: 56, background: 'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0))', filter: 'blur(18px)', opacity: 0.25 }} />
-                          {/* thin accent bar on left */}
-                          <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: 'linear-gradient(180deg, rgba(147,197,253,0.55), rgba(34,211,238,0.35))' }} />
+                        className="persona-card persona-card--clickable"
+                        style={{ textAlign: 'left' as any }}>
+                        {/* Top-right badges */}
+                        <div className="persona-card__badges">
+                          <span className="pc-chip">{p.completion_pct}%</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: (personaDensity==='compact'?2:4) }}>
-                          <div style={{ fontWeight: 900, fontSize: (personaDensity==='compact'?16:18), letterSpacing: '0.3px' }}>{p.persona_name || `Persona #${p.persona_id}`}</div>
+
+                        {/* Title */}
+                        <h3 className="persona-card__title">{p.persona_name || `Persona #${p.persona_id}`}</h3>
+
+                        {/* 2x2 Metrics Grid */}
+                        <div className="persona-metrics">
+                          <div className="pc-metric">
+                            <div className="pc-metric__label">AVG STEPS</div>
+                            <div className="pc-metric__value">{p.avg_steps}</div>
                           </div>
-                        {/* floating completion pill */}
-                        <span className="badge" style={{ 
-                          position: 'absolute',
-                          top: 10,
-                          right: 12,
-                          background: p.completion_pct >= 100 ? 'rgba(52,211,153,0.18)' : p.completion_pct >= 80 ? 'rgba(34,211,238,0.18)' : 'rgba(245,158,11,0.18)', 
-                          border: p.completion_pct >= 100 ? '1px solid rgba(52,211,153,0.45)' : p.completion_pct >= 80 ? '1px solid rgba(34,211,238,0.45)' : '1px solid rgba(245,158,11,0.45)', 
-                          color: p.completion_pct >= 100 ? '#34D399' : p.completion_pct >= 80 ? '#22d3ee' : '#F59E0B',
-                          fontWeight: 800,
-                          fontSize: 12,
-                          padding: '4px 10px',
-                          borderRadius: 999,
-                          boxShadow: p.completion_pct >= 100 
-                            ? '0 0 0 3px rgba(52,211,153,0.06), 0 4px 16px rgba(52,211,153,0.16)'
-                            : p.completion_pct >= 80 
-                              ? '0 0 0 3px rgba(34,211,238,0.06), 0 4px 16px rgba(34,211,238,0.16)'
-                              : '0 0 0 3px rgba(245,158,11,0.06), 0 4px 16px rgba(245,158,11,0.16)'
-                        }}>{p.completion_pct}%</span>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: (personaDensity==='compact'?8:12), marginTop: (personaDensity==='compact'?8:12) }}>
-                          <div style={{ 
-                            background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))', 
-                            borderRadius: 10, 
-                            padding: '10px 12px',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                            backdropFilter: 'blur(4px)',
-                            WebkitBackdropFilter: 'blur(4px)'
-                          }}>
-                            <div className="muted" style={{ fontSize: (personaDensity==='compact'?10:11), fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: '#60A5FA' }} />
-                              Avg Steps
+                          <div className="pc-metric">
+                            <div className="pc-metric__label">DROP-OFFS</div>
+                            <div className="pc-metric__value">{p.dropoffs}</div>
                           </div>
-                            <div style={{ fontWeight: 900, fontSize: (personaDensity==='compact'?18:20), color: '#60A5FA', marginTop: 2 }}>{p.avg_steps}</div>
+                          <div className="pc-metric">
+                            <div className="pc-metric__label">FRICTION %</div>
+                            <div className="pc-metric__value">{p.friction_pct}%</div>
                           </div>
-                          <div style={{ 
-                            background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))', 
-                            borderRadius: 10, 
-                            padding: '10px 12px',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                            backdropFilter: 'blur(4px)',
-                            WebkitBackdropFilter: 'blur(4px)'
-                          }}>
-                            <div className="muted" style={{ fontSize: (personaDensity==='compact'?10:11), fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: (p.dropoffs > 0 ? '#F87171' : '#34D399') }} />
-                              Drop-offs
-                          </div>
-                            <div style={{ fontWeight: 900, fontSize: (personaDensity==='compact'?18:20), color: p.dropoffs > 0 ? '#F87171' : '#34D399', marginTop: 2 }}>{p.dropoffs}</div>
-                        </div>
-                          <div style={{ 
-                            background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))', 
-                            borderRadius: 10, 
-                            padding: '10px 12px',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                            backdropFilter: 'blur(4px)',
-                            WebkitBackdropFilter: 'blur(4px)'
-                          }}>
-                            <div className="muted" style={{ fontSize: (personaDensity==='compact'?10:11), fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: (p.friction_pct > 0 ? '#F59E0B' : '#34D399') }} />
-                              Friction %
-                            </div>
-                            <div style={{ fontWeight: 900, fontSize: (personaDensity==='compact'?18:20), color: p.friction_pct > 0 ? '#F59E0B' : '#34D399', marginTop: 2 }}>{p.friction_pct}%</div>
-                          </div>
-                          <div title={(p.drift == null ? 'No TEA sentiment available for this persona/run' : `Start ${p.sentiment_start?.toFixed?.(2)}, End ${p.sentiment_end?.toFixed?.(2)}, Δ ${(p.drift>0?'+':'')}${p.drift?.toFixed?.(2)}`)}
-                            style={{ 
-                              background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))', 
-                              borderRadius: 10, 
-                              padding: '10px 12px',
-                              border: '1px solid rgba(255,255,255,0.06)',
-                              backdropFilter: 'blur(4px)',
-                              WebkitBackdropFilter: 'blur(4px)'
-                            }}>
-                            <div className="muted" style={{ fontSize: (personaDensity==='compact'?10:11), fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Drift</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: (personaDensity==='compact'?6:8), marginTop: 2 }}>
-                              {/* tiny 2-point sparkline */}
-                              <svg width="46" height="14" viewBox="0 0 46 14" preserveAspectRatio="none" aria-hidden>
-                                {typeof p.sentiment_start === 'number' && typeof p.sentiment_end === 'number' ? (
-                                  <>
-                                    <polyline
-                                      fill="none"
-                                      stroke="#93c5fd"
-                                      strokeWidth="2"
-                                      points={(function(){
-                                        const s0 = Number(p.sentiment_start||0); const s1 = Number(p.sentiment_end||0);
-                                        // normalize into [2,12]
-                                        const min = Math.min(s0, s1, -1);
-                                        const max = Math.max(s0, s1, 1);
-                                        const y = (v:number)=>{
-                                          const t = (v - min) / Math.max(0.0001, (max - min));
-                                          return 12 - t * 10; // 2..12 padding
-                                        };
-                                        const p0 = `2,${y(s0).toFixed(2)}`;
-                                        const p1 = `44,${y(s1).toFixed(2)}`;
-                                        return `${p0} ${p1}`;
-                                      })()}
-                                    />
-                                  </>
-                                ) : null}
-                              </svg>
-                              <div style={{ fontWeight: 800, fontSize: (personaDensity==='compact'?18:20), color: (typeof p.drift === 'number' ? (p.drift > 0 ? '#34d399' : (p.drift < 0 ? '#f87171' : '#e5e7eb')) : '#9ca3af') }}>
-                                {typeof p.drift === 'number' ? (p.drift > 0 ? `+${p.drift.toFixed(2)}` : p.drift.toFixed(2)) : 'N/A'}
-                              </div>
+                          <div className="pc-metric">
+                            <div className="pc-metric__label">DRIFT</div>
+                            <div className="pc-metric__value">
+                              {typeof p.drift === 'number' ? (p.drift > 0 ? `+${p.drift.toFixed(2)}` : p.drift.toFixed(2)) : 'N/A'}
                             </div>
                           </div>
                         </div>
-                        <div className="muted" style={{ 
-                          fontSize: 11, 
-                          marginTop: (personaDensity==='compact'?8:12), 
-                          textAlign: 'center',
-                          opacity: 0.7,
-                          fontStyle: 'italic',
-                          letterSpacing: '0.3px'
-                        }}>Click for detailed TEA analysis and user paths</div>
+
+                        <div className="persona-card__hint">Click for detailed TEA analysis and user paths</div>
                       </button>
                       );
                     })}
@@ -2140,10 +2026,13 @@ export default function ReportsPage() {
               </div>
 
               {openPersonaId && (
-                <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 10060, display: 'flex', justifyContent: 'flex-end' }} onClick={() => { setOpenPersonaId(null); setPersonaDetail(null); }}>
-                  <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(860px, 92vw)', height: '100%', background: 'rgba(17,24,39,0.96)', borderLeft: '1px solid var(--border)', boxShadow: '0 0 40px rgba(0,0,0,0.5)', padding: 16, overflowY: 'auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <h3 style={{ margin: 0 }}>{personaCards.find(p => p.persona_id === openPersonaId)?.persona_name || `Persona #${openPersonaId}`}</h3>
+                <div className="persona-modal-overlay" onClick={() => { setOpenPersonaId(null); setPersonaDetail(null); }}>
+                  <div className="persona-modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(1100px, 90vw)', maxWidth: '1100px', height: '85vh' }}>
+                    <div className="persona-modal-header">
+                      <div>
+                        <h2 className="persona-modal-title">{personaCards.find(p => p.persona_id === openPersonaId)?.persona_name || `Persona #${openPersonaId}`}</h2>
+                        <p className="persona-modal-subtitle">Detailed analysis and user journey</p>
+                      </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <button
                           title="Download Excel"
@@ -2162,16 +2051,15 @@ export default function ReportsPage() {
                             } catch {}
                           }}
                           className="btn-ghost btn-sm"
-                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, padding: 0, borderRadius: 999, border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(2,6,23,0.55)', boxShadow: '0 8px 18px rgba(0,0,0,0.30)' }}
+                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                           aria-label="Download Excel"
                         >
-                          <IconDownload width={17} height={17} />
+                          <IconDownload width={16} height={16} />
+                          Download
                         </button>
-                        {/* Removed "View full report" per request */}
                         <button
                           onClick={() => { setOpenPersonaId(null); setPersonaDetail(null); setSelectedBacktrack(null); }}
-                          className="btn-ghost btn-sm"
-                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, padding: 0 }}
+                          className="persona-modal-close"
                           aria-label="Close"
                           title="Close"
                         >
@@ -2179,12 +2067,93 @@ export default function ReportsPage() {
                         </button>
                       </div>
                     </div>
-                    {personaDetailLoading && <div className="muted" style={{ marginTop: 8 }}>Loading…</div>}
-                    {(!personaDetailLoading && !personaDetail) && <div className="muted" style={{ marginTop: 8 }}>No detail</div>}
-                    {personaDetail && (
-                      <>
+
+                    <div className="persona-modal-body" style={{ gridTemplateColumns: '240px 1fr' }}>
+                      {/* Left Navigation */}
+                      <nav className="persona-modal-nav">
+                        <button
+                          className={`persona-modal-nav-item ${personaModalTab === 'think-aloud' ? 'active' : ''}`}
+                          onClick={() => setPersonaModalTab('think-aloud')}
+                        >
+                          Think Aloud
+                        </button>
+                        {personaModalTab === 'think-aloud' && (
+                          <div className="persona-modal-nav-subitems">
+                            <a href="#unique-tea" className="persona-modal-nav-subitem">Unique TEA</a>
+                            <a href="#detailed-tea" className="persona-modal-nav-subitem">Detailed TEA</a>
+                          </div>
+                        )}
+
+                        <button
+                          className={`persona-modal-nav-item ${personaModalTab === 'emotion' ? 'active' : ''}`}
+                          onClick={() => setPersonaModalTab('emotion')}
+                        >
+                          Emotion Composition
+                        </button>
+                        {personaModalTab === 'emotion' && (
+                          <div className="persona-modal-nav-subitems">
+                            <a href="#emotion-mix" className="persona-modal-nav-subitem">Emotion Mix</a>
+                            <a href="#sentiment-drift" className="persona-modal-nav-subitem">Sentiment Drift</a>
+                          </div>
+                        )}
+
+                        <button
+                          className={`persona-modal-nav-item ${personaModalTab === 'path' ? 'active' : ''}`}
+                          onClick={() => setPersonaModalTab('path')}
+                        >
+                          Path
+                        </button>
+                        {personaModalTab === 'path' && (
+                          <div className="persona-modal-nav-subitems">
+                            <a href="#flow-insights" className="persona-modal-nav-subitem">Flow Insights</a>
+                            <a href="#exits" className="persona-modal-nav-subitem">Exits</a>
+                            <a href="#backtracks" className="persona-modal-nav-subitem">Backtracks</a>
+                          </div>
+                        )}
+
+                        <button
+                          className={`persona-modal-nav-item ${personaModalTab === 'what-if' ? 'active' : ''}`}
+                          onClick={() => setPersonaModalTab('what-if')}
+                          disabled
+                          style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                        >
+                          What-if Simulations
+                        </button>
+                      </nav>
+
+                      <div className="persona-modal-content">
+                        {personaDetailLoading && <div className="muted">Loading…</div>}
+                        {(!personaDetailLoading && !personaDetail) && <div className="muted">No detail</div>}
+                        {personaDetail && (
+                          <div className="persona-modal-tab-content">
+                            {/* Think Aloud Tab */}
+                            {personaModalTab === 'think-aloud' && (
+                              <>
+                                {/* Unique TEA Thoughts */}
+                                <div id="unique-tea" className="tile">
+                                  <h4>Unique TEA Thoughts</h4>
+                                  {Array.isArray((personaDetail as any).tea_thoughts) && (personaDetail as any).tea_thoughts.length > 0 ? (
+                                    <div style={{ marginTop: 8 }}>
+                                      <TeaThoughtTimeline teaThoughts={Array.isArray((personaDetail as any).tea_thoughts) ? (personaDetail as any).tea_thoughts : []} />
+                                    </div>
+                                  ) : (
+                                    <div className="muted" style={{ marginTop: 8 }}>No thoughts</div>
+                                  )}
+                                </div>
+
+                                {/* Detailed TEA - placeholder for now */}
+                                <div id="detailed-tea" className="tile" style={{ marginTop: 12 }}>
+                                  <h4>Detailed TEA</h4>
+                                  <div className="muted">Detailed TEA analysis coming soon</div>
+                                </div>
+                              </>
+                            )}
+
+                            {/* Emotion Composition Tab */}
+                            {personaModalTab === 'emotion' && (
+                              <>
                         {/* Emotion mix */}
-                        <div className="tile" style={{ marginTop: 12 }}>
+                        <div id="emotion-mix" className="tile">
                           <h4>Emotion Mix</h4>
                           <ReactECharts style={{ height: 260 }} option={(function(){
                             // Prefer DB TEA aggregate; if empty, fall back to journey emotions array
@@ -2278,7 +2247,7 @@ export default function ReportsPage() {
                         )}
 
                         {/* Sentiment drift */}
-                        <div className="tile" style={{ marginTop: 12 }}>
+                        <div id="sentiment-drift" className="tile" style={{ marginTop: 12 }}>
                           <h4>Sentiment Drift</h4>
                           <ReactECharts style={{ height: 220 }} option={(function(){
                             const seriesData = Array.isArray((personaDetail as any)?.sentiment_series)
@@ -2355,7 +2324,7 @@ export default function ReportsPage() {
                         </div>
 
                         {/* Flow Insights (Sankey + Trendlines + Ranked List) */}
-                        <div className="tile" style={{ marginTop: 12 }}>
+                        <div id="flow-insights" className="tile" style={{ marginTop: 12 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h4 style={{ margin: 0 }}>Flow Insights</h4>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2421,7 +2390,7 @@ export default function ReportsPage() {
                         </div>
 
                         {/* Exits */}
-                        <div className="tile" style={{ marginTop: 12 }}>
+                        <div id="exits" className="tile" style={{ marginTop: 12 }}>
                           <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between' }}>
                             <h4 style={{ margin: 0 }}>Drop‑off Reasons</h4>
                           </div>
@@ -2484,7 +2453,7 @@ export default function ReportsPage() {
                         </div>
 
                         {/* Backtracks by screen */}
-                        <div className="tile" style={{ marginTop: 12 }}>
+                        <div id="backtracks" className="tile" style={{ marginTop: 12 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h4 style={{ margin: 0 }}>Backtracks by Screen</h4>
                             {selectedBacktrack && (
@@ -2632,19 +2601,31 @@ export default function ReportsPage() {
                           })()}
                         </div>
 
-                        {/* Unique thoughts */}
-                        <div className="tile" style={{ marginTop: 12 }}>
-                          <h4>Unique TEA Thoughts</h4>
-                          {Array.isArray((personaDetail as any)?.tea_thoughts) && (personaDetail as any).tea_thoughts.length > 0 ? (
-  <div style={{ marginTop: 8 }}>
-    <TeaThoughtTimeline teaThoughts={Array.isArray((personaDetail as any).tea_thoughts) ? (personaDetail as any).tea_thoughts : []} />
-  </div>
-                          ) : (
-                            <div className="muted" style={{ marginTop: 8 }}>No thoughts</div>
-                          )}
-                        </div>
-                      </>
-                    )}
+                              </>
+                            )}
+
+                            {/* Path Tab - Flow insights and backtracks */}
+                            {personaModalTab === 'path' && (
+                              <>
+                                {/* Flow insights content here */}
+                                <div className="tile">
+                                  <h4>Flow Insights</h4>
+                                  <div className="muted">Path analysis coming soon</div>
+                                </div>
+                              </>
+                            )}
+
+                            {/* What-if Simulations Tab - Disabled */}
+                            {personaModalTab === 'what-if' && (
+                              <div className="tile">
+                                <h4>What-if Simulations</h4>
+                                <div className="muted">Coming soon</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
