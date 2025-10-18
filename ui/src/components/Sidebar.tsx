@@ -3,11 +3,26 @@ import Link from 'next/link';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useSelectedLayoutSegments } from 'next/navigation';
-import { IconHome, IconCog, IconBeaker, IconFolder, IconQuestionCircle, IconMail, IconActivity } from './icons';
+import { IconHome, IconCog, IconBeaker, IconFolder, IconQuestionCircle, IconMail, IconActivity, IconFourSquare } from './icons';
 
-const NAV = [
-  { href: '/', label: 'Dashboard', icon: <IconHome width={18} height={18} /> },
-  { href: '/create-run', label: 'Launch Test', icon: <IconBeaker width={18} height={18} /> },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: JSX.Element;
+  subItems?: Array<{ href: string; label: string }>;
+};
+
+const NAV: NavItem[] = [
+  { href: '/', label: 'Home', icon: <IconFourSquare width={18} height={18} /> },
+  {
+    href: '/create-run',
+    label: 'Launch Usability Test',
+    icon: <IconBeaker width={18} height={18} />,
+    subItems: [
+      { href: '/configure-persona', label: 'Configure Persona' },
+      { href: '/configure-test', label: 'Configure Test' }
+    ]
+  },
   { href: '/reports', label: 'Reports', icon: <IconFolder width={18} height={18} /> },
 ];
 
@@ -146,11 +161,40 @@ export default function Sidebar() {
           const navRoot = rootOf(item.href);
           const active = (item.href === '/' ? seg0 === '' : navRoot === seg0) ||
             (normalizedPath === item.href || normalizedPath.startsWith(item.href + '/'));
+
           return (
-            <Link key={item.href} href={item.href} prefetch={false} className={`rail-item${active ? ' active' : ''}`} data-tip={item.label} title={item.label}>
-              <span className="icon" aria-hidden>{item.icon}</span>
-              <span className="label">{item.label}</span>
-            </Link>
+            <div key={item.href}>
+              <Link href={item.href} prefetch={false} className={`rail-item${active ? ' active' : ''}`} data-tip={item.label} title={item.label}>
+                <span className="icon" aria-hidden>{item.icon}</span>
+                <span className="label">{item.label}</span>
+              </Link>
+
+              {/* Sub-items */}
+              {item.subItems && !collapsed && (
+                <div style={{ marginLeft: 30, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {item.subItems.map(subItem => {
+                    const subActive = normalizedPath === subItem.href || normalizedPath.startsWith(subItem.href + '/');
+                    return (
+                      <Link
+                        key={subItem.href}
+                        href={subItem.href}
+                        prefetch={false}
+                        className={`rail-item${subActive ? ' active' : ''}`}
+                        style={{
+                          padding: '8px 12px',
+                          fontSize: 13,
+                          borderRadius: 8,
+                          border: 'none'
+                        }}
+                        title={subItem.label}
+                      >
+                        <span className="label">{subItem.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

@@ -136,6 +136,17 @@ export function IconFilter(props: IconProps) {
   );
 }
 
+export function IconFourSquare(props: IconProps) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
 export type IconComponent = (props: IconProps) => JSX.Element;
 
 

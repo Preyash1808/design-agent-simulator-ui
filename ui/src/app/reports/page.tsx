@@ -130,6 +130,8 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RunMetrics | null>(null);
   const [lastRequested, setLastRequested] = useState<string>("");
+  const [goals, setGoals] = useState<Array<{ id: string; goal: string }>>([]);
+  const [selectedGoal, setSelectedGoal] = useState("");
   const [tab, setTab] = useState<'overview'|'persona'>('overview');
   const [fbFilter, setFbFilter] = useState<string>("");
   const [fbLimit, setFbLimit] = useState<number>(8);
@@ -1167,6 +1169,44 @@ export default function ReportsPage() {
     }
     loadLatestCompleted();
   }, []);
+  // Fetch goals when project is selected
+  useEffect(() => {
+    if (!selectedProject) {
+      setGoals([]);
+      return;
+    }
+    async function loadGoals() {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const r = await fetch(`/api/status?attach_signed_urls=0`, {
+          headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          cache: 'no-store'
+        });
+        if (!r.ok) return;
+        const data = await r.json();
+        // Filter runs for the selected project and extract unique goals
+        const projectRuns = (data.items || []).filter((item: any) =>
+          String(item.type).toLowerCase() === 'run' &&
+          String(item.project_id) === selectedProject
+        );
+        // Create unique goals array with run IDs
+        const goalsMap = new Map();
+        projectRuns.forEach((run: any) => {
+          const runId = String(run.id || run.run_id || '');
+          const goalText = String(run.goal || '');
+          if (runId && !goalsMap.has(runId)) {
+            goalsMap.set(runId, { id: runId, goal: goalText });
+          }
+        });
+        setGoals(Array.from(goalsMap.values()));
+      } catch (err) {
+        console.error('Failed to load goals:', err);
+        setGoals([]);
+      }
+    }
+    loadGoals();
+  }, [selectedProject]);
+
   useEffect(() => { if (runQuery.length >= 1) searchRuns(runQuery); else setRuns([]); }, [runQuery, selectedProject]);
   // Auto load metrics when both project and run id present (debounced)
   useEffect(() => {
@@ -1261,19 +1301,28 @@ export default function ReportsPage() {
             Project
             <FancySelect
               value={selectedProject}
-              onChange={setSelectedProject}
+              onChange={(val) => {
+                setSelectedProject(val);
+                setSelectedGoal('');
+                setGoals([]);
+                setRunQuery('');
+              }}
               placeholder="Select project"
               options={projects.map(p => ({ value: p.id, label: p.name }))}
               searchable={false}
             />
           </label>
           <label>
-            Run Id
-            <input
-              placeholder="Type at least 3 characters"
-              value={runQuery}
-              onChange={e => setRunQuery(e.target.value)}
-              disabled={false}
+            Goal
+            <FancySelect
+              value={selectedGoal}
+              onChange={(val) => {
+                setSelectedGoal(val);
+                setRunQuery(val);
+              }}
+              placeholder={selectedProject ? "Select a goal" : "Select project first"}
+              options={goals.map(g => ({ value: g.id, label: g.goal || `Goal ${g.id.slice(0, 8)}` }))}
+              searchable={true}
             />
           </label>
         </div>

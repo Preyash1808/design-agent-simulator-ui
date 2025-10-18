@@ -2,6 +2,7 @@
 import React from 'react';
 import { IconChevronRight, IconChevronDown } from '../icons';
 import PersonaModal from '../PersonaModal';
+import Link from 'next/link';
 
 type Persona = { id: string; name: string; bio?: string };
 type PersonaConfig = { personaId: string; traits: string; users: string; collapsed?: boolean };
@@ -13,6 +14,8 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
   const [exclusiveUsers, setExclusiveUsers] = React.useState<boolean>(false);
   const [selectedPersona, setSelectedPersona] = React.useState<Persona | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = React.useState<string>('');
+  const [selectedPersonas, setSelectedPersonas] = React.useState<Map<string, number>>(new Map());
 
   React.useEffect(() => {
     let mounted = true;
@@ -75,24 +78,76 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
     setCards(list => list.map((c, i) => ({ ...c, collapsed: i !== idx }))); // current expanded, others minimized
   }
 
+  function togglePersona(personaId: string, checked: boolean) {
+    const newMap = new Map(selectedPersonas);
+    if (checked) {
+      // Add with default user count (3)
+      newMap.set(personaId, 3);
+    } else {
+      newMap.delete(personaId);
+    }
+    setSelectedPersonas(newMap);
+  }
+
+  function updateUserCount(personaId: string, delta: number) {
+    const newMap = new Map(selectedPersonas);
+    const current = newMap.get(personaId) || 0;
+    const updated = Math.max(0, current + delta);
+    if (updated === 0) {
+      newMap.delete(personaId);
+    } else {
+      newMap.set(personaId, updated);
+    }
+    setSelectedPersonas(newMap);
+  }
+
+  function setUserCount(personaId: string, count: number) {
+    const newMap = new Map(selectedPersonas);
+    if (count <= 0) {
+      newMap.delete(personaId);
+    } else {
+      newMap.set(personaId, count);
+    }
+    setSelectedPersonas(newMap);
+  }
+
+  function resetSelection() {
+    setSelectedPersonas(new Map());
+  }
+
   function launch() {
-    // Validate: each card must have name or id, users > 0; total users <= 3000
+    // Validate: at least one persona selected, total users <= 3000
+    if (selectedPersonas.size === 0) {
+      alert('Please select at least one persona.');
+      return;
+    }
+
     let total = 0;
     const cleaned: any[] = [];
-    for (const c of cards) {
-      const resolved = resolveFromInput(c.personaId);
-      const traits = String(c.traits || '');
-      const usersNum = parseInt(String(c.users || '').trim(), 10);
-      const hasName = !!(resolved.name && resolved.name.trim()) || typeof resolved.personaId === 'number';
-      if (!hasName) { alert('Each persona must have a name or valid ID.'); return; }
-      if (!Number.isFinite(usersNum) || usersNum <= 0) { alert('Number of Users must be a positive number for each persona.'); return; }
-      total += usersNum;
-      const base: any = { traits, users: usersNum };
-      if (resolved.personaId && resolved.personaId > 0) base.personaId = resolved.personaId;
-      if (resolved.name) base.name = resolved.name;
-      cleaned.push(base);
+
+    for (const [personaId, users] of selectedPersonas.entries()) {
+      const persona = personas.find(p => p.id === personaId);
+      if (!persona) continue;
+
+      if (!Number.isFinite(users) || users <= 0) {
+        alert(`Number of Users must be a positive number for ${persona.name}.`);
+        return;
+      }
+
+      total += users;
+      cleaned.push({
+        personaId: Number(personaId),
+        name: persona.name,
+        traits: persona.bio || '',
+        users
+      });
     }
-    if (total > 3000) { alert('Total users across personas cannot exceed 3000.'); return; }
+
+    if (total > 3000) {
+      alert('Total users across personas cannot exceed 3000.');
+      return;
+    }
+
     setLoading(true);
     onLaunch(cleaned, exclusiveUsers);
     setLoading(false);
@@ -111,98 +166,203 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
     setSelectedPersona(null);
   }
 
+  const filteredPersonas = personas.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.bio && p.bio.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const totalUsers = Array.from(selectedPersonas.values()).reduce((sum, count) => sum + count, 0);
+  const isOverLimit = totalUsers > 3000;
+
   return (
     <>
-      <div className="tile">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3>Personas</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div className="muted" style={{ fontWeight: 600 }}>Total Users:</div>
-            <div style={{ fontWeight: 600 }}>{cards.reduce((sum, c) => sum + (Number(c.users) || 0), 0)}</div>
+      {/* Header */}
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="page-title">Select Personas for Test</h1>
+            <p className="meta">Choose personas and set users per group.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {onBack && (<button type="button" className="btn btn-secondary" onClick={onBack}>Back</button>)}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={selectedPersonas.size === 0 || loading || isOverLimit}
+              onClick={launch}
+            >
+              {loading ? 'Starting…' : 'Save Selection'}
+            </button>
           </div>
         </div>
-        <div className="card" style={{ marginTop: 12 }}>
-          <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-            {cards.map((c, idx) => (
-              <div key={idx} className="card" style={{ padding: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <button
-                    type="button"
-                    aria-label={c.collapsed ? 'Expand persona' : 'Collapse persona'}
-                    onClick={() => toggleCollapsed(idx)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCollapsed(idx); } }}
-                    aria-expanded={!c.collapsed}
-                    aria-controls={`persona-card-${idx}`}
-                    style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 bg-slate-50">
+        {/* Left: persona list */}
+        <section className="lg:col-span-2">
+          {/* Search */}
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex grow items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white">
+              <svg className="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M21 21l-4.3-4.3M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/>
+              </svg>
+              <input
+                className="input border-0 h-auto p-0 w-full"
+                placeholder="Search personas"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Persona cards */}
+          <div className="space-y-3">
+            {filteredPersonas.length === 0 ? (
+              <div className="card text-center text-slate-600">No personas match your search.</div>
+            ) : (
+              filteredPersonas.map(persona => {
+                const isSelected = selectedPersonas.has(persona.id);
+                const userCount = selectedPersonas.get(persona.id) || 0;
+
+                return (
+                  <div
+                    key={persona.id}
+                    className="row-card flex items-start justify-between"
+                    style={{ borderColor: isSelected ? '#cbd5e1' : undefined }}
                   >
-                    <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22 }}>
-                      {c.collapsed ? <IconChevronRight width={18} height={18} /> : <IconChevronDown width={18} height={18} />}
-                    </span>
-                    {(c.collapsed
-                      ? (String(personas.find(p => String(p.id)===String(c.personaId))?.name || c.personaId || '').toString() || 'Persona')
-                      : '')}
-                  </button>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {c.personaId && personas.find(p => String(p.id) === String(c.personaId)) && (
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-slate-900"
+                            checked={isSelected}
+                            onChange={(e) => togglePersona(persona.id, e.target.checked)}
+                          />
+                          <span className="text-slate-900 font-medium truncate">{persona.name}</span>
+                        </label>
+                        <span className="chip chip-neutral">Focus-driven</span>
+                        <button
+                          className="text-xs text-slate-600 hover:text-slate-900"
+                          onClick={() => openPersonaModal(persona.id)}
+                        >
+                          Details
+                        </button>
+                      </div>
+                      <div className="meta mt-1 truncate" title={persona.bio || ''}>
+                        {persona.bio || 'No description available'}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">Default users: 3</div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
                       <button
-                        type="button"
-                        className="btn-ghost btn-sm"
-                        onClick={() => openPersonaModal(c.personaId)}
+                        disabled={!isSelected}
+                        className="stepper-btn"
+                        onClick={() => updateUserCount(persona.id, -1)}
                       >
-                        View Details
+                        –
                       </button>
-                    )}
-                    {cards.length > 1 && (
-                      <button type="button" className="btn-ghost btn-sm" onClick={() => removeCard(idx)}>Remove</button>
-                    )}
+                      <input
+                        readOnly
+                        value={userCount}
+                        className="stepper-input"
+                      />
+                      <button
+                        disabled={!isSelected}
+                        className="stepper-btn"
+                        onClick={() => updateUserCount(persona.id, 1)}
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                </div>
-              {c.collapsed ? null : (
-                <div id={`persona-card-${idx}`} className="grid" style={{ marginTop: 8 }}>
-                  <label>
-                    Name
-                    <input value={c.personaId} onChange={(e)=>updateCard(idx, { personaId: e.target.value })} onFocus={()=>focusCard(idx)} placeholder="Type a name you want to give to the Persona" />
-                  </label>
-                  <label>
-                    Traits
-                    <textarea rows={3} value={c.traits} onChange={(e)=>updateCard(idx, { traits: e.target.value })} onFocus={()=>focusCard(idx)} placeholder="e.g., Low vision, prefers minimal prompts" />
-                  </label>
-                  <label>
-                    Number of Users
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={c.users} onChange={(e)=>updateCard(idx, { users: e.target.value.replace(/[^0-9]/g, '') })} onFocus={()=>focusCard(idx)} placeholder="Enter count" />
-                  </label>
-                </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        {/* Right: selection summary */}
+        <aside className="lg:sticky lg:top-20 h-fit">
+          <div className="sidebar">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="h-4 w-4 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6 4a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>
+              </svg>
+              <h3 className="section-title">Selection Summary</h3>
+            </div>
+
+            <div className="text-sm text-slate-700 space-y-1">
+              {selectedPersonas.size === 0 ? (
+                <p className="text-slate-500">No personas selected yet.</p>
+              ) : (
+                Array.from(selectedPersonas.entries()).map(([personaId, users]) => {
+                  const persona = personas.find(p => p.id === personaId);
+                  if (!persona) return null;
+                  return (
+                    <div key={personaId} className="flex items-center justify-between">
+                      <span className="truncate">{persona.name}</span>
+                      <span className="tabular-nums text-slate-900">{users} users</span>
+                    </div>
+                  );
+                })
               )}
             </div>
-          ))}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-          <button type="button" className="btn-ghost" onClick={addCard}>Add Persona</button>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={!exclusiveUsers}
-                onChange={(e)=>setExclusiveUsers(!e.target.checked)}
-                style={{ accentColor: '#ffffff' }}
-              />
-              <span>Overlap users</span>
-            </label>
-            {onBack && (<button type="button" className="btn-ghost" onClick={onBack}>Back</button>)}
-            <button type="button" className="btn-primary" disabled={!cards.length || loading} onClick={launch}>{loading ? 'Starting…' : 'Execute Test'}</button>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    {selectedPersona && (
-      <PersonaModal
-        persona={selectedPersona}
-        isOpen={isModalOpen}
-        onClose={closeModal}
-      />
-    )}
-  </>
+            <div className="divider"></div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-600">Total users</span>
+              <span className={`tabular-nums font-medium ${isOverLimit ? 'text-red-600' : 'text-slate-900'}`}>
+                {totalUsers} <span className="text-slate-500">/ 3000</span>
+              </span>
+            </div>
+
+            {isOverLimit && (
+              <div className="mt-2 chip chip-warn">Exceeds allowed total users</div>
+            )}
+
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                className="btn btn-secondary"
+                onClick={resetSelection}
+                disabled={selectedPersonas.size === 0}
+              >
+                Reset
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={launch}
+                disabled={selectedPersonas.size === 0 || loading || isOverLimit}
+              >
+                {loading ? 'Starting…' : 'Save Selection'}
+              </button>
+            </div>
+
+            <p className="mt-4 text-xs text-slate-500">
+              Personas are managed in <Link href="/configure-persona" className="underline hover:text-slate-800">Configure Personas</Link>.
+            </p>
+          </div>
+
+          <div className="mt-4 card p-4 text-sm text-slate-700">
+            <div className="flex items-center gap-2">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M9 5l7 7-7 7"/>
+              </svg>
+              Next: Define Goal & Screens
+            </div>
+          </div>
+        </aside>
+      </main>
+
+      {selectedPersona && (
+        <PersonaModal
+          persona={selectedPersona}
+          isOpen={isModalOpen}
+          onClose={closeModal}
+        />
+      )}
+    </>
   );
 }
 

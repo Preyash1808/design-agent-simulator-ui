@@ -1,0 +1,1051 @@
+"use client";
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import StepIndicator from '../../components/StepIndicator';
+import FancySelect from '../../components/FancySelect';
+import SegmentedToggle from '../../components/SegmentedToggle';
+import PersonaPicker from '../../components/persona/PersonaPicker';
+import { IconPlus, IconLayers } from '../../components/icons';
+
+export default function CreateRunUnifiedPage() {
+  const [useExisting, setUseExisting] = useState(false);
+  const [initReady, setInitReady] = useState(false);
+  const [allProjects, setAllProjects] = useState<{id:string,name:string}[]>([]);
+  const [projects, setProjects] = useState<{id:string,name:string}[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [page, setPage] = useState('');
+  const [figmaUrl, setFigmaUrl] = useState('');
+  const [step, setStep] = useState<'choose'|'preprocess'|'tests'|'personas'|'done'>('choose');
+  const [loading, setLoading] = useState(false);
+  const [preprocessInfo, setPreprocessInfo] = useState<any|null>(null);
+  const [status, setStatus] = useState<any|null>(null);
+  const [goal, setGoal] = useState('');
+  const [showErrorsChoose, setShowErrorsChoose] = useState(false);
+  const [showErrorsTests, setShowErrorsTests] = useState(false);
+  const [sourceFile, setSourceFile] = useState<File|null>(null);
+  const [targetFile, setTargetFile] = useState<File|null>(null);
+  const [uploadPct, setUploadPct] = useState(0);
+  const sourceInputRef = useRef<HTMLInputElement | null>(null);
+  const targetInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDraggingSource, setIsDraggingSource] = useState(false);
+  const [isDraggingTarget, setIsDraggingTarget] = useState(false);
+  const sourcePreviewUrl = useMemo(() => sourceFile ? URL.createObjectURL(sourceFile) : null, [sourceFile]);
+  const targetPreviewUrl = useMemo(() => targetFile ? URL.createObjectURL(targetFile) : null, [targetFile]);
+
+  // Multi-goal state
+  type GoalItem = {
+    id: string;
+    goal: string;
+    sourceFile: File | null;
+    targetFile: File | null;
+    sourcePreview: string | null;
+    targetPreview: string | null;
+  };
+  const [goals, setGoals] = useState<GoalItem[]>([
+    { id: crypto.randomUUID(), goal: '', sourceFile: null, targetFile: null, sourcePreview: null, targetPreview: null }
+  ]);
+  const [expandedGoalId, setExpandedGoalId] = useState<string>(goals[0]?.id || '');
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [activeRunStatus, setActiveRunStatus] = useState<string | null>(null);
+  const [activeRunLog, setActiveRunLog] = useState<string | null>(null);
+  const [runElapsedSec, setRunElapsedSec] = useState(0);
+  const runStartRef = useRef<number | null>(null);
+  const [runStartMs, setRunStartMs] = useState<number | null>(null);
+  const [recent, setRecent] = useState<any | null>(null);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [pageSeconds, setPageSeconds] = useState(0);
+  const [bootLoading, setBootLoading] = useState(true);
+  const [completedProjectIds, setCompletedProjectIds] = useState<string[]>([]);
+  const [defaultCompletedProjectId, setDefaultCompletedProjectId] = useState('');
+
+  const unifiedEnabled = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_UNIFIED_FLOW === '1' || process.env.NEXT_PUBLIC_UNIFIED_FLOW === 'true') : true;
+  const STATE_KEY = 'sparrow_launch_state_v1';
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    // Restore any saved state for this login session; then compute defaults if not restored
+    (async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(STATE_KEY) : null;
+        if (token && raw) {
+          try {
+            const saved = JSON.parse(raw);
+            if (saved && saved.token === token) {
+              if (saved.step && ['choose','preprocess','tests','personas','done'].includes(saved.step)) setStep(saved.step);
+              if (typeof saved.useExisting === 'boolean') setUseExisting(!!saved.useExisting);
+              if (saved.selectedProjectId) setSelectedProjectId(String(saved.selectedProjectId));
+              if (saved.projectName) setProjectName(String(saved.projectName));
+              if (saved.page) setPage(String(saved.page));
+              if (saved.figmaUrl) setFigmaUrl(String(saved.figmaUrl));
+              if (saved.goal) setGoal(String(saved.goal));
+              restoredRef.current = true;
+            }
+          } catch {}
+        }
+      } catch {}
+      try {
+        // Prefer the most recent COMPLETED project for defaults
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const r = await fetch('/api/status?attach_signed_urls=0', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+        const data = await r.json();
+        const items: any[] = Array.isArray(data?.items) ? data.items : [];
+        const projectsOnly = items.filter(it => String(it.type).toLowerCase()==='project');
+        const completed = projectsOnly.filter((p:any)=> String(p.status||'').toUpperCase()==='COMPLETED');
+        const completedIds = completed.map((p:any)=> String(p.project_id || p.id || ''))
+                                     .filter((s:string)=> !!s);
+        setCompletedProjectIds(completedIds);
+        if (completed.length > 0) {
+          setUseExisting(true);
+          // Pick latest COMPLETED by updated_at/created_at
+          completed.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
+          const lastCompleted = completed[0];
+          const pid = String(lastCompleted?.project_id || lastCompleted?.id || '');
+          setDefaultCompletedProjectId(pid);
+          if (pid) setSelectedProjectId(pid);
+        }
+      } catch {}
+      setInitReady(true);
+    })();
+    // Load projects for existing selection (can happen in parallel; UI waits on initReady)
+    (async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const r = await fetch('/api/projects', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+        const data = await r.json();
+        const list: any[] = Array.isArray(data?.projects) ? data.projects : [];
+        setAllProjects(list.map(p => ({ id: String(p.id), name: String(p.name||p.id) })));
+      } catch {}
+    })();
+    // Land on Results if latest run is INPROGRESS, or if latest COMPLETED finished within last 5 minutes
+    (async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const r = await fetch('/api/status?attach_signed_urls=0', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+        if (!r.ok) return;
+        const data = await r.json();
+        const runsOnly: any[] = (data.items || []).filter((x:any) => String(x.type).toLowerCase() === 'run');
+        if (!runsOnly.length) return;
+        runsOnly.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
+        const latest = runsOnly[0];
+        const latestStatus = String(latest.status || '').toUpperCase();
+        const ridLatest = String(latest.id || latest.run_id || '');
+        if (latestStatus === 'INPROGRESS' && ridLatest) {
+          setActiveRunId(ridLatest);
+          setActiveRunStatus('INPROGRESS');
+          if (latest.log_path) setActiveRunLog(String(latest.log_path));
+          const started = new Date(latest.created_at || latest.started_at || latest.updated_at || Date.now()).getTime();
+          runStartRef.current = started;
+          setRunStartMs(started);
+          setStep('done');
+          return;
+        }
+        const completed = runsOnly.find((x:any)=> String(x.status||'').toUpperCase()==='COMPLETED');
+        if (!completed) return;
+        const finishedAtMs = new Date(completed.updated_at || completed.created_at || Date.now()).getTime();
+        if ((Date.now() - finishedAtMs) <= 5 * 60 * 1000) {
+          const rid = String(completed.id || completed.run_id || '');
+          if (rid) {
+            setActiveRunId(rid);
+            setActiveRunStatus('COMPLETED');
+            if (completed.log_path) setActiveRunLog(String(completed.log_path));
+          }
+          setStep('done');
+        }
+      } catch {}
+      finally {
+        // We decide the landing step (possibly 'done') before revealing the page
+        setBootLoading(false);
+      }
+    })();
+  }, []);
+
+  // Persist state for current login session
+  useEffect(() => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+      if (!token) return;
+      const payload = { token, step, useExisting, selectedProjectId, projectName, page, figmaUrl, goal };
+      localStorage.setItem(STATE_KEY, JSON.stringify(payload));
+    } catch {}
+  }, [step, useExisting, selectedProjectId, projectName, page, figmaUrl, goal]);
+
+  // Clear saved state on logout (authStateChanged without token)
+  useEffect(() => {
+    const onAuth = () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        if (!token) {
+          localStorage.removeItem(STATE_KEY);
+          setStep('choose');
+        }
+      } catch {}
+    };
+    window.addEventListener('authStateChanged', onAuth);
+    return () => window.removeEventListener('authStateChanged', onAuth);
+  }, []);
+
+  // Load recent project like the old Create Project page
+  function renderStatus(status?: string) {
+    const k = (status || '').toLowerCase();
+    let color = 'var(--muted)';
+    if (k === 'completed') color = '#10b981';
+    else if (k === 'failed') color = '#ef4444';
+    else if (k === 'inprogress' || k === 'in_progress' || k === 'in-progress') color = '#f59e0b';
+    return <span style={{ color, fontWeight: 700 }}>{status || '-'}</span>;
+  }
+  function formatElapsed(total: number): string {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  async function loadRecent() {
+    setLoadingRecent(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+      const r = await fetch('/api/status?attach_signed_urls=0', { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+      if (r.status === 401) {
+        localStorage.removeItem('sparrow_token');
+        localStorage.removeItem('sparrow_user_name');
+        window.dispatchEvent(new CustomEvent('authStateChanged'));
+        setRecent(null);
+      } else {
+        const data = await r.json();
+        const items: any[] = Array.isArray(data?.items) ? data.items : [];
+        const projectsOnly = items.filter((it:any) => String(it.type).toLowerCase() === 'project');
+        // Pick latest by updated_at or created_at, regardless of status
+        projectsOnly.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
+        const proj = projectsOnly[0] || null;
+        setRecent(proj);
+        if (proj && String(proj.status).toUpperCase() !== 'COMPLETED') {
+          const started = proj.created_at ? new Date(proj.created_at).getTime() : (proj.updated_at ? new Date(proj.updated_at).getTime() : null);
+          if (started && !Number.isNaN(started)) setElapsedSec(Math.max(0, Math.floor((Date.now() - started) / 1000)));
+        } else {
+          setElapsedSec(0);
+        }
+      }
+    } catch {
+      setRecent(null);
+    }
+    setLoadingRecent(false);
+  }
+  useEffect(() => { loadRecent(); }, []);
+  // Fallback: always show UI within 700ms even if network is slow
+  useEffect(() => { const t = setTimeout(() => setBootLoading(false), 700); return () => clearTimeout(t); }, []);
+  
+  // Derive the filtered project list (COMPLETED only) whenever sources change
+  useEffect(() => {
+    try {
+      if (allProjects.length === 0) { setProjects([]); return; }
+      if (completedProjectIds.length === 0) {
+        // If we don't yet know completed ids, keep current selection but show empty list until status arrives
+        setProjects(allProjects.filter(p => completedProjectIds.includes(p.id)));
+        return;
+      }
+      const filtered = allProjects.filter(p => completedProjectIds.includes(p.id));
+      setProjects(filtered);
+      // If current selection is not in filtered set, default to latest completed
+      const exists = filtered.some(p => p.id === selectedProjectId);
+      if (!exists && defaultCompletedProjectId) {
+        setSelectedProjectId(defaultCompletedProjectId);
+      }
+    } catch {}
+  }, [allProjects, completedProjectIds, defaultCompletedProjectId]);
+  useEffect(() => {
+    if (!recent || String(recent.status).toUpperCase() === 'COMPLETED') return;
+    const id = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [recent]);
+
+  // Page timer: increments every second while on Results tab
+  useEffect(() => {
+    if (step !== 'done') return;
+    setPageSeconds(0);
+    const id = setInterval(() => setPageSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [step]);
+
+  // Poll combined status when we have a run_id from preprocess
+  useEffect(() => {
+    if (!preprocessInfo?.run_id || step !== 'preprocess') return;
+    let stop = false;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+    const tick = async () => {
+      try {
+        const r = await fetch(`/api/status?run_id=${encodeURIComponent(preprocessInfo.run_id)}`, { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+        const data = await r.json();
+        setStatus(data);
+        const item = (data.items || []).find((x:any)=> String(x.type).toLowerCase()==='project' && String(x.run_dir||'').includes(preprocessInfo.run_id));
+        const st = String(item?.status || '').toUpperCase();
+        if (st === 'COMPLETED') {
+          setStep('tests');
+        } else if (st === 'FAILED') {
+          // stay on preprocess but show failed
+        }
+      } catch {}
+      if (!stop) setTimeout(tick, 4000);
+    };
+    tick();
+    return () => { stop = true; };
+  }, [preprocessInfo?.run_id, step]);
+
+  async function startPreprocess(e: React.FormEvent) {
+    e.preventDefault();
+    if (useExisting && !selectedProjectId) { setShowErrorsChoose(true); return; }
+    if (!useExisting && (!page || !figmaUrl)) { setShowErrorsChoose(true); return; }
+    setLoading(true);
+    try {
+      if (useExisting) {
+        // Skip to tests step directly; ensure project is ready via status API
+        setStep('tests');
+      } else {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const r = await fetch('/api/preprocess', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ page, figmaUrl, projectName: projectName || page }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data?.detail || data?.error || 'preprocess failed');
+        setPreprocessInfo(data);
+        setStep('preprocess');
+      }
+    } catch (err:any) {
+      alert(String(err?.message || err || 'Failed'));
+    }
+    setLoading(false);
+  }
+
+  async function startTests(e: React.FormEvent) {
+    e.preventDefault();
+    if (!goal || !sourceFile || !targetFile) { setShowErrorsTests(true); return; }
+    // Navigate to persona selection instead of immediately starting the run
+    setStep('personas');
+  }
+
+  // Generic status refresh: uses activeRunId when present, otherwise discovers latest run
+  async function refreshStatus() {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+      const url = activeRunId ? (`/api/status?run_id=${encodeURIComponent(activeRunId)}`) : '/api/status';
+      const r = await fetch(url, { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+      if (!r.ok) return;
+      const data = await r.json();
+      let runItem: any = null;
+      if (activeRunId) {
+        runItem = (data.items || []).find((x:any)=> String(x.type).toLowerCase()==='run' && String(x.id)===String(activeRunId));
+      }
+      if (!runItem) {
+        const runsOnly: any[] = (data.items || []).filter((x:any)=> String(x.type).toLowerCase()==='run');
+        if (runsOnly.length) {
+          runsOnly.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
+          runItem = runsOnly[0];
+        }
+      }
+      if (runItem) {
+        const rid = String(runItem.id || '');
+        if (rid && !activeRunId) setActiveRunId(rid);
+        setActiveRunStatus(String(runItem.status || ''));
+        setActiveRunLog(runItem.log_path || null);
+        if (!runStartRef.current) {
+          const startedAt = new Date(runItem.created_at || runItem.started_at || runItem.updated_at || Date.now()).getTime();
+          runStartRef.current = startedAt;
+          setRunElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+        }
+      }
+    } catch {}
+  }
+
+  // When entering Results tab, refresh status immediately
+  useEffect(() => {
+    if (step !== 'done') return;
+    refreshStatus();
+  }, [step]);
+
+  // Poll status every 20 seconds while on Results tab
+  useEffect(() => {
+    if (step !== 'done') return;
+    let stop = false;
+    const tick = async () => {
+      try { await refreshStatus(); } catch {}
+      if (!stop) setTimeout(tick, 20000);
+    };
+    tick();
+    return () => { stop = true; };
+  }, [step, activeRunId]);
+
+  async function launchRun(personaConfigs: { personaId: number; traits: string; users: number }[], exclusiveUsers: boolean) {
+    if (!goal || !sourceFile || !targetFile) return;
+    setLoading(true);
+    try {
+      const form = new FormData();
+      const pid = useExisting ? selectedProjectId : String(preprocessInfo?.db?.project_id || '');
+      if (!pid) throw new Error('Missing projectId');
+      form.set('projectId', pid);
+      form.set('goal', goal);
+      form.set('maxMinutes', String(2));
+      form.set('source', sourceFile);
+      form.set('target', targetFile);
+      try {
+        form.set('personas', JSON.stringify(personaConfigs || []));
+        form.set('exclusiveUsers', String(!!exclusiveUsers));
+      } catch {}
+
+      const xhr = new XMLHttpRequest();
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+      const p = new Promise<{status:number, body:any}>((resolve, reject) => {
+        xhr.upload.onprogress = (evt) => {
+          if (evt.lengthComputable) {
+            setUploadPct(Math.round((evt.loaded/evt.total)*100));
+          }
+        };
+        xhr.onerror = () => reject(new Error('network error'));
+        xhr.onload = () => {
+          try { resolve({ status: xhr.status, body: JSON.parse(xhr.responseText||'{}') }); }
+          catch { resolve({ status: xhr.status, body: {} }); }
+        };
+      });
+      xhr.open('POST', '/api/tests');
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.send(form);
+      const res = await p;
+      if (res.status < 200 || res.status >= 300) throw new Error('tests start failed');
+      const rid = String(res.body?.db?.run_id || res.body?.test_run_id || '');
+      if (rid) {
+        console.log('[LAUNCH DEBUG] Setting activeRunId:', rid);
+        setActiveRunId(rid);
+      }
+      // initialize timer immediately
+      const now = Date.now();
+      console.log('[LAUNCH DEBUG] Setting runStartRef.current to:', now);
+      runStartRef.current = now;
+      setRunStartMs(now);
+      setRunElapsedSec(0);
+      setStep('done');
+    } catch (err:any) {
+      alert(String(err?.message || err || 'Failed'));
+    }
+    setLoading(false);
+  }
+
+  // Poll run status after tests start (uses DB run id via /api/status?run_id=...)
+  useEffect(() => {
+    if (!activeRunId || step !== 'done') return;
+    let stop = false;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+    const tick = async () => {
+      try {
+        const r = await fetch(`/api/status?run_id=${encodeURIComponent(activeRunId)}`, { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+        const data = await r.json();
+        const runItem = (data.items || []).find((x:any)=> String(x.type).toLowerCase()==='run' && String(x.id)===String(activeRunId));
+        if (runItem) {
+          const status = String(runItem.status || '');
+          console.log('[STATUS DEBUG] Found run item, status:', status, 'runItem:', runItem);
+          setActiveRunStatus(status);
+          setActiveRunLog(runItem.log_path || null);
+          // set start time once
+          const startedAt = new Date(runItem.created_at || runItem.started_at || runItem.updated_at || Date.now()).getTime();
+          if (!runStartRef.current || runStartRef.current !== startedAt) {
+            console.log('[STATUS DEBUG] Setting runStartRef.current from status polling:', startedAt);
+            runStartRef.current = startedAt;
+            setRunStartMs(startedAt);
+          }
+          setRunElapsedSec(Math.max(0, Math.floor((Date.now() - (runStartRef.current || startedAt)) / 1000)));
+          const st = String(runItem.status || '').toUpperCase();
+          if (st === 'COMPLETED' || st === 'FAILED') {
+            console.log('[STATUS DEBUG] Run completed/failed, stopping polling');
+            return; // stop polling
+          }
+        } else {
+          console.log('[STATUS DEBUG] No run item found for activeRunId:', activeRunId);
+        }
+      } catch {}
+      if (!stop) setTimeout(tick, 20000);
+    };
+    tick();
+    return () => { stop = true; };
+  }, [activeRunId, step]);
+
+  // live timer while INPROGRESS
+  useEffect(() => {
+    console.log('[TIMER DEBUG] activeRunId:', activeRunId, 'activeRunStatus:', activeRunStatus, 'runStartRef.current:', runStartRef.current);
+    if (!activeRunId) {
+      console.log('[TIMER DEBUG] No activeRunId, returning');
+      return;
+    }
+    const st = String(activeRunStatus || '').toUpperCase();
+    console.log('[TIMER DEBUG] Status string:', st, 'startsWith IN:', st.startsWith('IN'));
+    if (!st.startsWith('IN')) {
+      console.log('[TIMER DEBUG] Status does not start with IN, returning');
+      return;
+    }
+    if (!runStartRef.current) {
+      console.log('[TIMER DEBUG] No runStartRef.current, returning');
+      return;
+    }
+    console.log('[TIMER DEBUG] Starting timer interval');
+    const id = setInterval(() => {
+      if (!runStartRef.current) return;
+      const elapsed = Math.max(0, Math.floor((Date.now() - runStartRef.current) / 1000));
+      console.log('[TIMER DEBUG] Updating elapsed time:', elapsed);
+      setRunElapsedSec(elapsed);
+    }, 1000);
+    return () => {
+      console.log('[TIMER DEBUG] Clearing timer interval');
+      clearInterval(id);
+    };
+  }, [activeRunId, activeRunStatus, runStartMs]);
+
+  function renderChoose() {
+    if (!initReady) {
+      return (
+        <div className="tile">
+          <h3>Select Project</h3>
+          <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
+        </div>
+      );
+    }
+    return (
+      <div className="tile">
+        <form onSubmit={startPreprocess} className={showErrorsChoose ? 'show-errors' : undefined}>
+          <h3>Select Project</h3>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+            <SegmentedToggle
+              value={useExisting ? 'existing' : 'new'}
+              options={[
+                { key: 'new', label: 'New Project', icon: <IconPlus width={16} height={16} /> },
+                { key: 'existing', label: 'Existing Project', icon: <IconLayers width={16} height={16} /> },
+              ]}
+              onChange={(k) => setUseExisting(k === 'existing')}
+            />
+          </div>
+          {useExisting ? (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <label>Project</label>
+              <FancySelect
+                value={selectedProjectId}
+                onChange={setSelectedProjectId}
+                placeholder="Select a project"
+                // Only show COMPLETED projects in dropdown
+                options={projects.map(p => ({ value: p.id, label: p.name || p.id }))}
+                searchable={true}
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <label>Project Name</label>
+              <input value={projectName} onChange={(e)=>setProjectName(e.target.value)} placeholder="My Project" />
+              <label>Figma File URL</label>
+              <input value={figmaUrl} onChange={(e)=>setFigmaUrl(e.target.value)} required />
+              <label>Figma Page</label>
+              <input value={page} onChange={(e)=>setPage(e.target.value)} required />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+            <button className="btn-primary" disabled={loading} type="submit">{loading ? 'Working...' : (useExisting ? 'Continue' : 'Create project')}</button>
+          </div>
+        </form>
+
+        {!useExisting && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3 style={{ margin: 0 }}>Recent Project</h3>
+          {loadingRecent ? (
+            <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
+          ) : recent ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 10 }}>
+              <div>
+                <div className="muted">Name</div>
+                <div style={{ fontWeight: 700 }}>{recent.project_name || recent.name}</div>
+              </div>
+              <div>
+                <div className="muted">Page</div>
+                <div>{recent.figma_page || '-'}</div>
+              </div>
+              <div>
+                <div className="muted">Status</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>{renderStatus(recent.status)}</div>
+                  {String(recent.status).toUpperCase() !== 'COMPLETED' && (
+                    <div className="muted" style={{ fontVariantNumeric: 'tabular-nums' }}>{formatElapsed(elapsedSec)}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="muted" style={{ marginTop: 8 }}>No recent project found.</p>
+          )}
+        </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderPreprocess() {
+    const runId = preprocessInfo?.run_id;
+    const p = (status?.items || []).find((x:any)=> String(x.type).toLowerCase()==='project' && String(x.run_dir||'').includes(runId));
+    const st = String(p?.status || 'INPROGRESS');
+    return (
+      <div className="tile">
+        <h3>Preprocess</h3>
+        <div>Status: <b>{st}</b></div>
+        <div style={{ marginTop: 8 }}>This can take 15–20 minutes. You can navigate away; it will continue.</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+          <a className="btn-ghost" href={preprocessInfo?.log} target="_blank" rel="noreferrer">View Logs</a>
+        </div>
+      </div>
+    );
+  }
+
+  function onPickSourceClick() { sourceInputRef.current?.click(); }
+  function onPickTargetClick() { targetInputRef.current?.click(); }
+  function onDropSource(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingSource(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) setSourceFile(file);
+  }
+  function onDropTarget(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingTarget(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) setTargetFile(file);
+  }
+  const uploading = loading && !!sourceFile && !!targetFile;
+
+  function addNewGoal() {
+    const newGoal: GoalItem = {
+      id: crypto.randomUUID(),
+      goal: '',
+      sourceFile: null,
+      targetFile: null,
+      sourcePreview: null,
+      targetPreview: null
+    };
+    setGoals([...goals, newGoal]);
+    setExpandedGoalId(newGoal.id);
+  }
+
+  function removeGoal(id: string) {
+    if (goals.length === 1) return; // Keep at least one goal
+    setGoals(goals.filter(g => g.id !== id));
+    if (expandedGoalId === id) {
+      setExpandedGoalId(goals.find(g => g.id !== id)?.id || '');
+    }
+  }
+
+  function updateGoal(id: string, updates: Partial<GoalItem>) {
+    setGoals(goals.map(g => {
+      if (g.id === id) {
+        const updated = { ...g, ...updates };
+        // Update preview URLs if files changed
+        if (updates.sourceFile !== undefined) {
+          updated.sourcePreview = updates.sourceFile ? URL.createObjectURL(updates.sourceFile) : null;
+        }
+        if (updates.targetFile !== undefined) {
+          updated.targetPreview = updates.targetFile ? URL.createObjectURL(updates.targetFile) : null;
+        }
+        return updated;
+      }
+      return g;
+    }));
+  }
+
+  function renderTests() {
+    const validateGoals = () => {
+      return goals.every(g => g.goal.trim() && g.sourceFile && g.targetFile);
+    };
+
+    return (
+      <div className="tile">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 style={{ margin: 0 }}>Test Goals</h3>
+          <button
+            type="button"
+            className="btn-ghost btn-sm"
+            onClick={addNewGoal}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <IconPlus width={16} height={16} /> Add Goal
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+          {goals.map((goalItem, index) => {
+            const isExpanded = expandedGoalId === goalItem.id;
+            const isComplete = goalItem.goal.trim() && goalItem.sourceFile && goalItem.targetFile;
+
+            return (
+              <div
+                key={goalItem.id}
+                style={{
+                  background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(249,250,251,1))',
+                  border: isExpanded ? '2px solid #3B82F6' : '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: 16,
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {/* Goal Header */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => setExpandedGoalId(isExpanded ? '' : goalItem.id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      background: isComplete ? '#10B981' : '#CBD5E1',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: 14
+                    }}>
+                      {index + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, color: 'var(--text)' }}>
+                        {goalItem.goal.trim() || `Goal ${index + 1}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {isComplete && (
+                      <span style={{
+                        fontSize: 12,
+                        color: '#10B981',
+                        fontWeight: 600,
+                        background: '#D1FAE5',
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        border: '1px solid #A7F3D0'
+                      }}>
+                        ✓ Complete
+                      </span>
+                    )}
+                    {goals.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removeGoal(goalItem.id); }}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          padding: '6px 10px',
+                          color: '#EF4444',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                    <span style={{ color: 'var(--muted)', fontSize: 20 }}>
+                      {isExpanded ? '▼' : '▶'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Expanded Content */}
+                {isExpanded && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                    {/* Goal Description */}
+                    <label style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>Goal Description</span>
+                      <textarea
+                        rows={3}
+                        value={goalItem.goal}
+                        onChange={e => updateGoal(goalItem.id, { goal: e.target.value })}
+                        placeholder="Describe what the user should accomplish..."
+                        style={{
+                          background: '#FFFFFF',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          padding: 12,
+                          fontSize: 14
+                        }}
+                      />
+                    </label>
+
+                    {/* Start & Stop Screens */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      {/* Start Screen */}
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8, color: 'var(--text)' }}>
+                          Start Screen
+                        </div>
+                        <div
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = (e: any) => {
+                              const file = e.target?.files?.[0];
+                              if (file) updateGoal(goalItem.id, { sourceFile: file });
+                            };
+                            input.click();
+                          }}
+                          style={{
+                            height: 160,
+                            border: '2px dashed var(--border)',
+                            borderRadius: 12,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            background: goalItem.sourcePreview ? `url(${goalItem.sourcePreview}) center/cover` : '#F8FAFC',
+                            position: 'relative',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3B82F6'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                        >
+                          {!goalItem.sourceFile && (
+                            <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                              <div style={{ fontSize: 14, fontWeight: 600 }}>Click to upload</div>
+                              <div style={{ fontSize: 12, marginTop: 4 }}>or drag & drop</div>
+                            </div>
+                          )}
+                          {goalItem.sourceFile && (
+                            <div style={{
+                              position: 'absolute',
+                              bottom: 8,
+                              left: 8,
+                              right: 8,
+                              background: 'rgba(0,0,0,0.8)',
+                              borderRadius: 8,
+                              padding: 8,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            >
+                              <div style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 600 }}>
+                                {goalItem.sourceFile.name}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => updateGoal(goalItem.id, { sourceFile: null, sourcePreview: null })}
+                                style={{
+                                  background: '#EF4444',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: 6,
+                                  padding: '4px 8px',
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stop Screen */}
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8, color: 'var(--text)' }}>
+                          Stop Screen (Goal)
+                        </div>
+                        <div
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = (e: any) => {
+                              const file = e.target?.files?.[0];
+                              if (file) updateGoal(goalItem.id, { targetFile: file });
+                            };
+                            input.click();
+                          }}
+                          style={{
+                            height: 160,
+                            border: '2px dashed var(--border)',
+                            borderRadius: 12,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            background: goalItem.targetPreview ? `url(${goalItem.targetPreview}) center/cover` : '#F8FAFC',
+                            position: 'relative',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3B82F6'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                        >
+                          {!goalItem.targetFile && (
+                            <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                              <div style={{ fontSize: 14, fontWeight: 600 }}>Click to upload</div>
+                              <div style={{ fontSize: 12, marginTop: 4 }}>or drag & drop</div>
+                            </div>
+                          )}
+                          {goalItem.targetFile && (
+                            <div style={{
+                              position: 'absolute',
+                              bottom: 8,
+                              left: 8,
+                              right: 8,
+                              background: 'rgba(0,0,0,0.8)',
+                              borderRadius: 8,
+                              padding: 8,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            >
+                              <div style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 600 }}>
+                                {goalItem.targetFile.name}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => updateGoal(goalItem.id, { targetFile: null, targetPreview: null })}
+                                style={{
+                                  background: '#EF4444',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: 6,
+                                  padding: '4px 8px',
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <button type="button" className="btn-ghost" onClick={() => setStep('choose')} disabled={loading}>
+            Back
+          </button>
+          <button
+            className="btn-primary"
+            disabled={loading || !validateGoals()}
+            onClick={(e) => { e.preventDefault(); if (validateGoals()) setStep('personas'); }}
+          >
+            {loading ? 'Processing...' : 'Continue to Personas'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderDone() {
+    return (
+      <div className="tile">
+        {/* Header: run id only */}
+        <div className="muted" style={{ marginBottom: 6 }}>
+          <span>Run Id: </span>
+          <span style={{ opacity: .9 }}>{activeRunId || '-'}</span>
+        </div>
+        {/* Status + inline timer (timer aligned to right) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 16 }}>
+          <div>
+          {(() => {
+            const k = String(activeRunStatus || '').toUpperCase();
+            const color = (k === 'COMPLETED')
+              ? '#10b981'
+              : (k === 'FAILED')
+                ? '#ef4444'
+                : ((k === 'INPROGRESS' || k === 'IN_PROGRESS' || k === 'IN-PROGRESS') ? '#f59e0b' : 'var(--muted)');
+              const label = k || 'STARTED';
+              return (
+                <>
+                  <span>Status: </span>
+                  <span style={{ color, fontWeight: 700 }}>{label}</span>
+                </>
+              );
+            })()}
+          </div>
+          {String(activeRunStatus || '').toUpperCase().startsWith('IN') ? (
+            <span style={{ fontVariantNumeric: 'tabular-nums', color: '#cbd5e1' }}>{formatElapsed(runElapsedSec)}</span>
+          ) : <span />}
+        </div>
+        {String(activeRunStatus || '').toUpperCase() === 'INPROGRESS' && (
+          <div className="progress indeterminate ice" style={{ marginTop: 12 }}>
+            <span style={{ width: '100%' }} />
+          </div>
+        )}
+        {String(activeRunStatus || '').toUpperCase() === 'COMPLETED' && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Link className="btn-ghost" href="/reports">View Result</Link>
+        </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderPersonas() {
+    return (
+      <PersonaPicker onLaunch={(configs, exclusive) => launchRun(configs as any, exclusive)} onBack={() => setStep('tests')} />
+    );
+  }
+
+  return (
+    <div>
+      <div className="dash-header">Launch Test</div>
+      {bootLoading ? (
+        <div className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160 }}>
+          <div className="spinner" />
+        </div>
+      ) : (
+        <>
+          <div className="tile" style={{ marginBottom: 12, padding: 12, minHeight: 'unset' as any }}>
+        <StepIndicator
+          steps={[
+            { label: 'Project' },
+                { label: 'Test Setup' },
+                { label: 'Personas' },
+            { label: 'Results' },
+          ]}
+              activeIndex={(step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3}
+              onStepClick={(idx) => {
+                // Only allow navigating to current/past steps
+                const currentIdx = (step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3;
+                if (idx > currentIdx) return;
+                if (idx === 0) setStep('choose');
+                else if (idx === 1) setStep('tests');
+                else if (idx === 2) setStep('personas');
+                else setStep('done');
+              }}
+        />
+      </div>
+      {step === 'choose' && renderChoose()}
+      {step === 'preprocess' && renderPreprocess()}
+      {step === 'tests' && renderTests()}
+          {step === 'personas' && renderPersonas()}
+      {step === 'done' && renderDone()}
+        </>
+      )}
+    </div>
+  );
+}
+
+

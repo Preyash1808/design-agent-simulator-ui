@@ -1,801 +1,155 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
-import StepIndicator from '../../components/StepIndicator';
-import FancySelect from '../../components/FancySelect';
-import SegmentedToggle from '../../components/SegmentedToggle';
-import PersonaPicker from '../../components/persona/PersonaPicker';
-import { IconPlus, IconLayers } from '../../components/icons';
 
-export default function CreateRunUnifiedPage() {
-  const [useExisting, setUseExisting] = useState(false);
-  const [initReady, setInitReady] = useState(false);
-  const [allProjects, setAllProjects] = useState<{id:string,name:string}[]>([]);
-  const [projects, setProjects] = useState<{id:string,name:string}[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
-  const [projectName, setProjectName] = useState('');
-  const [page, setPage] = useState('');
-  const [figmaUrl, setFigmaUrl] = useState('');
-  const [step, setStep] = useState<'choose'|'preprocess'|'tests'|'personas'|'done'>('choose');
-  const [loading, setLoading] = useState(false);
-  const [preprocessInfo, setPreprocessInfo] = useState<any|null>(null);
-  const [status, setStatus] = useState<any|null>(null);
-  const [goal, setGoal] = useState('');
-  const [showErrorsChoose, setShowErrorsChoose] = useState(false);
-  const [showErrorsTests, setShowErrorsTests] = useState(false);
-  const [sourceFile, setSourceFile] = useState<File|null>(null);
-  const [targetFile, setTargetFile] = useState<File|null>(null);
-  const [uploadPct, setUploadPct] = useState(0);
-  const sourceInputRef = useRef<HTMLInputElement | null>(null);
-  const targetInputRef = useRef<HTMLInputElement | null>(null);
-  const [isDraggingSource, setIsDraggingSource] = useState(false);
-  const [isDraggingTarget, setIsDraggingTarget] = useState(false);
-  const sourcePreviewUrl = useMemo(() => sourceFile ? URL.createObjectURL(sourceFile) : null, [sourceFile]);
-  const targetPreviewUrl = useMemo(() => targetFile ? URL.createObjectURL(targetFile) : null, [targetFile]);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [activeRunStatus, setActiveRunStatus] = useState<string | null>(null);
-  const [activeRunLog, setActiveRunLog] = useState<string | null>(null);
-  const [runElapsedSec, setRunElapsedSec] = useState(0);
-  const runStartRef = useRef<number | null>(null);
-  const [runStartMs, setRunStartMs] = useState<number | null>(null);
-  const [recent, setRecent] = useState<any | null>(null);
-  const [loadingRecent, setLoadingRecent] = useState(false);
-  const [elapsedSec, setElapsedSec] = useState(0);
-  const [pageSeconds, setPageSeconds] = useState(0);
-  const [bootLoading, setBootLoading] = useState(true);
-  const [completedProjectIds, setCompletedProjectIds] = useState<string[]>([]);
-  const [defaultCompletedProjectId, setDefaultCompletedProjectId] = useState('');
-
-  const unifiedEnabled = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_UNIFIED_FLOW === '1' || process.env.NEXT_PUBLIC_UNIFIED_FLOW === 'true') : true;
-  const STATE_KEY = 'sparrow_launch_state_v1';
-  const restoredRef = useRef(false);
-
-  useEffect(() => {
-    // Restore any saved state for this login session; then compute defaults if not restored
-    (async () => {
-      try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-        const raw = typeof window !== 'undefined' ? localStorage.getItem(STATE_KEY) : null;
-        if (token && raw) {
-          try {
-            const saved = JSON.parse(raw);
-            if (saved && saved.token === token) {
-              if (saved.step && ['choose','preprocess','tests','personas','done'].includes(saved.step)) setStep(saved.step);
-              if (typeof saved.useExisting === 'boolean') setUseExisting(!!saved.useExisting);
-              if (saved.selectedProjectId) setSelectedProjectId(String(saved.selectedProjectId));
-              if (saved.projectName) setProjectName(String(saved.projectName));
-              if (saved.page) setPage(String(saved.page));
-              if (saved.figmaUrl) setFigmaUrl(String(saved.figmaUrl));
-              if (saved.goal) setGoal(String(saved.goal));
-              restoredRef.current = true;
-            }
-          } catch {}
-        }
-      } catch {}
-      try {
-        // Prefer the most recent COMPLETED project for defaults
-        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-        const r = await fetch('/api/status?attach_signed_urls=0', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
-        const data = await r.json();
-        const items: any[] = Array.isArray(data?.items) ? data.items : [];
-        const projectsOnly = items.filter(it => String(it.type).toLowerCase()==='project');
-        const completed = projectsOnly.filter((p:any)=> String(p.status||'').toUpperCase()==='COMPLETED');
-        const completedIds = completed.map((p:any)=> String(p.project_id || p.id || ''))
-                                     .filter((s:string)=> !!s);
-        setCompletedProjectIds(completedIds);
-        if (completed.length > 0) {
-          setUseExisting(true);
-          // Pick latest COMPLETED by updated_at/created_at
-          completed.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
-          const lastCompleted = completed[0];
-          const pid = String(lastCompleted?.project_id || lastCompleted?.id || '');
-          setDefaultCompletedProjectId(pid);
-          if (pid) setSelectedProjectId(pid);
-        }
-      } catch {}
-      setInitReady(true);
-    })();
-    // Load projects for existing selection (can happen in parallel; UI waits on initReady)
-    (async () => {
-      try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-        const r = await fetch('/api/projects', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
-        const data = await r.json();
-        const list: any[] = Array.isArray(data?.projects) ? data.projects : [];
-        setAllProjects(list.map(p => ({ id: String(p.id), name: String(p.name||p.id) })));
-      } catch {}
-    })();
-    // Land on Results if latest run is INPROGRESS, or if latest COMPLETED finished within last 5 minutes
-    (async () => {
-      try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-        const r = await fetch('/api/status?attach_signed_urls=0', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
-        if (!r.ok) return;
-        const data = await r.json();
-        const runsOnly: any[] = (data.items || []).filter((x:any) => String(x.type).toLowerCase() === 'run');
-        if (!runsOnly.length) return;
-        runsOnly.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
-        const latest = runsOnly[0];
-        const latestStatus = String(latest.status || '').toUpperCase();
-        const ridLatest = String(latest.id || latest.run_id || '');
-        if (latestStatus === 'INPROGRESS' && ridLatest) {
-          setActiveRunId(ridLatest);
-          setActiveRunStatus('INPROGRESS');
-          if (latest.log_path) setActiveRunLog(String(latest.log_path));
-          const started = new Date(latest.created_at || latest.started_at || latest.updated_at || Date.now()).getTime();
-          runStartRef.current = started;
-          setRunStartMs(started);
-          setStep('done');
-          return;
-        }
-        const completed = runsOnly.find((x:any)=> String(x.status||'').toUpperCase()==='COMPLETED');
-        if (!completed) return;
-        const finishedAtMs = new Date(completed.updated_at || completed.created_at || Date.now()).getTime();
-        if ((Date.now() - finishedAtMs) <= 5 * 60 * 1000) {
-          const rid = String(completed.id || completed.run_id || '');
-          if (rid) {
-            setActiveRunId(rid);
-            setActiveRunStatus('COMPLETED');
-            if (completed.log_path) setActiveRunLog(String(completed.log_path));
-          }
-          setStep('done');
-        }
-      } catch {}
-      finally {
-        // We decide the landing step (possibly 'done') before revealing the page
-        setBootLoading(false);
-      }
-    })();
-  }, []);
-
-  // Persist state for current login session
-  useEffect(() => {
-    try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-      if (!token) return;
-      const payload = { token, step, useExisting, selectedProjectId, projectName, page, figmaUrl, goal };
-      localStorage.setItem(STATE_KEY, JSON.stringify(payload));
-    } catch {}
-  }, [step, useExisting, selectedProjectId, projectName, page, figmaUrl, goal]);
-
-  // Clear saved state on logout (authStateChanged without token)
-  useEffect(() => {
-    const onAuth = () => {
-      try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-        if (!token) {
-          localStorage.removeItem(STATE_KEY);
-          setStep('choose');
-        }
-      } catch {}
-    };
-    window.addEventListener('authStateChanged', onAuth);
-    return () => window.removeEventListener('authStateChanged', onAuth);
-  }, []);
-
-  // Load recent project like the old Create Project page
-  function renderStatus(status?: string) {
-    const k = (status || '').toLowerCase();
-    let color = 'var(--muted)';
-    if (k === 'completed') color = '#10b981';
-    else if (k === 'failed') color = '#ef4444';
-    else if (k === 'inprogress' || k === 'in_progress' || k === 'in-progress') color = '#f59e0b';
-    return <span style={{ color, fontWeight: 700 }}>{status || '-'}</span>;
-  }
-  function formatElapsed(total: number): string {
-    const m = Math.floor(total / 60);
-    const s = total % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-  async function loadRecent() {
-    setLoadingRecent(true);
-    try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-      const r = await fetch('/api/status?attach_signed_urls=0', { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
-      if (r.status === 401) {
-        localStorage.removeItem('sparrow_token');
-        localStorage.removeItem('sparrow_user_name');
-        window.dispatchEvent(new CustomEvent('authStateChanged'));
-        setRecent(null);
-      } else {
-        const data = await r.json();
-        const items: any[] = Array.isArray(data?.items) ? data.items : [];
-        const projectsOnly = items.filter((it:any) => String(it.type).toLowerCase() === 'project');
-        // Pick latest by updated_at or created_at, regardless of status
-        projectsOnly.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
-        const proj = projectsOnly[0] || null;
-        setRecent(proj);
-        if (proj && String(proj.status).toUpperCase() !== 'COMPLETED') {
-          const started = proj.created_at ? new Date(proj.created_at).getTime() : (proj.updated_at ? new Date(proj.updated_at).getTime() : null);
-          if (started && !Number.isNaN(started)) setElapsedSec(Math.max(0, Math.floor((Date.now() - started) / 1000)));
-        } else {
-          setElapsedSec(0);
-        }
-      }
-    } catch {
-      setRecent(null);
-    }
-    setLoadingRecent(false);
-  }
-  useEffect(() => { loadRecent(); }, []);
-  // Fallback: always show UI within 700ms even if network is slow
-  useEffect(() => { const t = setTimeout(() => setBootLoading(false), 700); return () => clearTimeout(t); }, []);
-  
-  // Derive the filtered project list (COMPLETED only) whenever sources change
-  useEffect(() => {
-    try {
-      if (allProjects.length === 0) { setProjects([]); return; }
-      if (completedProjectIds.length === 0) {
-        // If we don't yet know completed ids, keep current selection but show empty list until status arrives
-        setProjects(allProjects.filter(p => completedProjectIds.includes(p.id)));
-        return;
-      }
-      const filtered = allProjects.filter(p => completedProjectIds.includes(p.id));
-      setProjects(filtered);
-      // If current selection is not in filtered set, default to latest completed
-      const exists = filtered.some(p => p.id === selectedProjectId);
-      if (!exists && defaultCompletedProjectId) {
-        setSelectedProjectId(defaultCompletedProjectId);
-      }
-    } catch {}
-  }, [allProjects, completedProjectIds, defaultCompletedProjectId]);
-  useEffect(() => {
-    if (!recent || String(recent.status).toUpperCase() === 'COMPLETED') return;
-    const id = setInterval(() => setElapsedSec((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [recent]);
-
-  // Page timer: increments every second while on Results tab
-  useEffect(() => {
-    if (step !== 'done') return;
-    setPageSeconds(0);
-    const id = setInterval(() => setPageSeconds((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [step]);
-
-  // Poll combined status when we have a run_id from preprocess
-  useEffect(() => {
-    if (!preprocessInfo?.run_id || step !== 'preprocess') return;
-    let stop = false;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-    const tick = async () => {
-      try {
-        const r = await fetch(`/api/status?run_id=${encodeURIComponent(preprocessInfo.run_id)}`, { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
-        const data = await r.json();
-        setStatus(data);
-        const item = (data.items || []).find((x:any)=> String(x.type).toLowerCase()==='project' && String(x.run_dir||'').includes(preprocessInfo.run_id));
-        const st = String(item?.status || '').toUpperCase();
-        if (st === 'COMPLETED') {
-          setStep('tests');
-        } else if (st === 'FAILED') {
-          // stay on preprocess but show failed
-        }
-      } catch {}
-      if (!stop) setTimeout(tick, 4000);
-    };
-    tick();
-    return () => { stop = true; };
-  }, [preprocessInfo?.run_id, step]);
-
-  async function startPreprocess(e: React.FormEvent) {
-    e.preventDefault();
-    if (useExisting && !selectedProjectId) { setShowErrorsChoose(true); return; }
-    if (!useExisting && (!page || !figmaUrl)) { setShowErrorsChoose(true); return; }
-    setLoading(true);
-    try {
-      if (useExisting) {
-        // Skip to tests step directly; ensure project is ready via status API
-        setStep('tests');
-      } else {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-        const r = await fetch('/api/preprocess', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ page, figmaUrl, projectName: projectName || page }),
-        });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data?.detail || data?.error || 'preprocess failed');
-        setPreprocessInfo(data);
-        setStep('preprocess');
-      }
-    } catch (err:any) {
-      alert(String(err?.message || err || 'Failed'));
-    }
-    setLoading(false);
-  }
-
-  async function startTests(e: React.FormEvent) {
-    e.preventDefault();
-    if (!goal || !sourceFile || !targetFile) { setShowErrorsTests(true); return; }
-    // Navigate to persona selection instead of immediately starting the run
-    setStep('personas');
-  }
-
-  // Generic status refresh: uses activeRunId when present, otherwise discovers latest run
-  async function refreshStatus() {
-    try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-      const url = activeRunId ? (`/api/status?run_id=${encodeURIComponent(activeRunId)}`) : '/api/status';
-      const r = await fetch(url, { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
-      if (!r.ok) return;
-      const data = await r.json();
-      let runItem: any = null;
-      if (activeRunId) {
-        runItem = (data.items || []).find((x:any)=> String(x.type).toLowerCase()==='run' && String(x.id)===String(activeRunId));
-      }
-      if (!runItem) {
-        const runsOnly: any[] = (data.items || []).filter((x:any)=> String(x.type).toLowerCase()==='run');
-        if (runsOnly.length) {
-          runsOnly.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
-          runItem = runsOnly[0];
-        }
-      }
-      if (runItem) {
-        const rid = String(runItem.id || '');
-        if (rid && !activeRunId) setActiveRunId(rid);
-        setActiveRunStatus(String(runItem.status || ''));
-        setActiveRunLog(runItem.log_path || null);
-        if (!runStartRef.current) {
-          const startedAt = new Date(runItem.created_at || runItem.started_at || runItem.updated_at || Date.now()).getTime();
-          runStartRef.current = startedAt;
-          setRunElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
-        }
-      }
-    } catch {}
-  }
-
-  // When entering Results tab, refresh status immediately
-  useEffect(() => {
-    if (step !== 'done') return;
-    refreshStatus();
-  }, [step]);
-
-  // Poll status every 20 seconds while on Results tab
-  useEffect(() => {
-    if (step !== 'done') return;
-    let stop = false;
-    const tick = async () => {
-      try { await refreshStatus(); } catch {}
-      if (!stop) setTimeout(tick, 20000);
-    };
-    tick();
-    return () => { stop = true; };
-  }, [step, activeRunId]);
-
-  async function launchRun(personaConfigs: { personaId: number; traits: string; users: number }[], exclusiveUsers: boolean) {
-    if (!goal || !sourceFile || !targetFile) return;
-    setLoading(true);
-    try {
-      const form = new FormData();
-      const pid = useExisting ? selectedProjectId : String(preprocessInfo?.db?.project_id || '');
-      if (!pid) throw new Error('Missing projectId');
-      form.set('projectId', pid);
-      form.set('goal', goal);
-      form.set('maxMinutes', String(2));
-      form.set('source', sourceFile);
-      form.set('target', targetFile);
-      try {
-        form.set('personas', JSON.stringify(personaConfigs || []));
-        form.set('exclusiveUsers', String(!!exclusiveUsers));
-      } catch {}
-
-      const xhr = new XMLHttpRequest();
-      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-      const p = new Promise<{status:number, body:any}>((resolve, reject) => {
-        xhr.upload.onprogress = (evt) => {
-          if (evt.lengthComputable) {
-            setUploadPct(Math.round((evt.loaded/evt.total)*100));
-          }
-        };
-        xhr.onerror = () => reject(new Error('network error'));
-        xhr.onload = () => {
-          try { resolve({ status: xhr.status, body: JSON.parse(xhr.responseText||'{}') }); }
-          catch { resolve({ status: xhr.status, body: {} }); }
-        };
-      });
-      xhr.open('POST', '/api/tests');
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.send(form);
-      const res = await p;
-      if (res.status < 200 || res.status >= 300) throw new Error('tests start failed');
-      const rid = String(res.body?.db?.run_id || res.body?.test_run_id || '');
-      if (rid) {
-        console.log('[LAUNCH DEBUG] Setting activeRunId:', rid);
-        setActiveRunId(rid);
-      }
-      // initialize timer immediately
-      const now = Date.now();
-      console.log('[LAUNCH DEBUG] Setting runStartRef.current to:', now);
-      runStartRef.current = now;
-      setRunStartMs(now);
-      setRunElapsedSec(0);
-      setStep('done');
-    } catch (err:any) {
-      alert(String(err?.message || err || 'Failed'));
-    }
-    setLoading(false);
-  }
-
-  // Poll run status after tests start (uses DB run id via /api/status?run_id=...)
-  useEffect(() => {
-    if (!activeRunId || step !== 'done') return;
-    let stop = false;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-    const tick = async () => {
-      try {
-        const r = await fetch(`/api/status?run_id=${encodeURIComponent(activeRunId)}`, { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
-        const data = await r.json();
-        const runItem = (data.items || []).find((x:any)=> String(x.type).toLowerCase()==='run' && String(x.id)===String(activeRunId));
-        if (runItem) {
-          const status = String(runItem.status || '');
-          console.log('[STATUS DEBUG] Found run item, status:', status, 'runItem:', runItem);
-          setActiveRunStatus(status);
-          setActiveRunLog(runItem.log_path || null);
-          // set start time once
-          const startedAt = new Date(runItem.created_at || runItem.started_at || runItem.updated_at || Date.now()).getTime();
-          if (!runStartRef.current || runStartRef.current !== startedAt) {
-            console.log('[STATUS DEBUG] Setting runStartRef.current from status polling:', startedAt);
-            runStartRef.current = startedAt;
-            setRunStartMs(startedAt);
-          }
-          setRunElapsedSec(Math.max(0, Math.floor((Date.now() - (runStartRef.current || startedAt)) / 1000)));
-          const st = String(runItem.status || '').toUpperCase();
-          if (st === 'COMPLETED' || st === 'FAILED') {
-            console.log('[STATUS DEBUG] Run completed/failed, stopping polling');
-            return; // stop polling
-          }
-        } else {
-          console.log('[STATUS DEBUG] No run item found for activeRunId:', activeRunId);
-        }
-      } catch {}
-      if (!stop) setTimeout(tick, 20000);
-    };
-    tick();
-    return () => { stop = true; };
-  }, [activeRunId, step]);
-
-  // live timer while INPROGRESS
-  useEffect(() => {
-    console.log('[TIMER DEBUG] activeRunId:', activeRunId, 'activeRunStatus:', activeRunStatus, 'runStartRef.current:', runStartRef.current);
-    if (!activeRunId) {
-      console.log('[TIMER DEBUG] No activeRunId, returning');
-      return;
-    }
-    const st = String(activeRunStatus || '').toUpperCase();
-    console.log('[TIMER DEBUG] Status string:', st, 'startsWith IN:', st.startsWith('IN'));
-    if (!st.startsWith('IN')) {
-      console.log('[TIMER DEBUG] Status does not start with IN, returning');
-      return;
-    }
-    if (!runStartRef.current) {
-      console.log('[TIMER DEBUG] No runStartRef.current, returning');
-      return;
-    }
-    console.log('[TIMER DEBUG] Starting timer interval');
-    const id = setInterval(() => {
-      if (!runStartRef.current) return;
-      const elapsed = Math.max(0, Math.floor((Date.now() - runStartRef.current) / 1000));
-      console.log('[TIMER DEBUG] Updating elapsed time:', elapsed);
-      setRunElapsedSec(elapsed);
-    }, 1000);
-    return () => {
-      console.log('[TIMER DEBUG] Clearing timer interval');
-      clearInterval(id);
-    };
-  }, [activeRunId, activeRunStatus, runStartMs]);
-
-  function renderChoose() {
-    if (!initReady) {
-      return (
-        <div className="tile">
-          <h3>Select Project</h3>
-          <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
-        </div>
-      );
-    }
-    return (
-      <div className="tile">
-        <form onSubmit={startPreprocess} className={showErrorsChoose ? 'show-errors' : undefined}>
-          <h3>Select Project</h3>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
-            <SegmentedToggle
-              value={useExisting ? 'existing' : 'new'}
-              options={[
-                { key: 'new', label: 'New Project', icon: <IconPlus width={16} height={16} /> },
-                { key: 'existing', label: 'Existing Project', icon: <IconLayers width={16} height={16} /> },
-              ]}
-              onChange={(k) => setUseExisting(k === 'existing')}
-            />
-          </div>
-          {useExisting ? (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <label>Project</label>
-              <FancySelect
-                value={selectedProjectId}
-                onChange={setSelectedProjectId}
-                placeholder="Select a project"
-                // Only show COMPLETED projects in dropdown
-                options={projects.map(p => ({ value: p.id, label: p.name || p.id }))}
-                searchable={true}
-              />
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <label>Project Name</label>
-              <input value={projectName} onChange={(e)=>setProjectName(e.target.value)} placeholder="My Project" />
-              <label>Figma File URL</label>
-              <input value={figmaUrl} onChange={(e)=>setFigmaUrl(e.target.value)} required />
-              <label>Figma Page</label>
-              <input value={page} onChange={(e)=>setPage(e.target.value)} required />
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-            <button className="btn-primary" disabled={loading} type="submit">{loading ? 'Working...' : (useExisting ? 'Continue' : 'Create project')}</button>
-          </div>
-        </form>
-
-        {!useExisting && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <h3 style={{ margin: 0 }}>Recent Project</h3>
-          {loadingRecent ? (
-            <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
-          ) : recent ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 10 }}>
-              <div>
-                <div className="muted">Name</div>
-                <div style={{ fontWeight: 700 }}>{recent.project_name || recent.name}</div>
-              </div>
-              <div>
-                <div className="muted">Page</div>
-                <div>{recent.figma_page || '-'}</div>
-              </div>
-              <div>
-                <div className="muted">Status</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>{renderStatus(recent.status)}</div>
-                  {String(recent.status).toUpperCase() !== 'COMPLETED' && (
-                    <div className="muted" style={{ fontVariantNumeric: 'tabular-nums' }}>{formatElapsed(elapsedSec)}</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="muted" style={{ marginTop: 8 }}>No recent project found.</p>
-          )}
-        </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderPreprocess() {
-    const runId = preprocessInfo?.run_id;
-    const p = (status?.items || []).find((x:any)=> String(x.type).toLowerCase()==='project' && String(x.run_dir||'').includes(runId));
-    const st = String(p?.status || 'INPROGRESS');
-    return (
-      <div className="tile">
-        <h3>Preprocess</h3>
-        <div>Status: <b>{st}</b></div>
-        <div style={{ marginTop: 8 }}>This can take 15–20 minutes. You can navigate away; it will continue.</div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-          <a className="btn-ghost" href={preprocessInfo?.log} target="_blank" rel="noreferrer">View Logs</a>
-        </div>
-      </div>
-    );
-  }
-
-  function onPickSourceClick() { sourceInputRef.current?.click(); }
-  function onPickTargetClick() { targetInputRef.current?.click(); }
-  function onDropSource(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingSource(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) setSourceFile(file);
-  }
-  function onDropTarget(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingTarget(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) setTargetFile(file);
-  }
-  const uploading = loading && !!sourceFile && !!targetFile;
-
-  function renderTests() {
-    return (
-      <div className="tile">
-        <h3>Test Setup</h3>
-        <form onSubmit={startTests} className={`grid ${showErrorsTests ? 'show-errors' : ''}`} style={{ marginTop: 16 }}>
-          <div className="row">
-            <div className="uploader">
-              <div
-                className={`dropzone ${isDraggingSource ? 'dragging' : ''}`}
-                onDragOver={e => { e.preventDefault(); setIsDraggingSource(true); }}
-                onDragLeave={() => setIsDraggingSource(false)}
-                onDrop={onDropSource}
-                onClick={onPickSourceClick}
-                role="button"
-                aria-label="Select or drop source image"
-                tabIndex={0}
-                style={{ position: 'relative' }}
-              >
-                <input
-                  ref={sourceInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={e => setSourceFile(e.target.files?.[0] || null)}
-                />
-                {!sourceFile && (
-                  <div className="dz-inner">
-                    <div className="dz-title">Source image</div>
-                    <div className="dz-sub">Drag & drop or click to select</div>
-                  </div>
-                )}
-                {sourceFile && (
-                  <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 10px', background: 'rgba(17,24,39,0.75)', border: '1px solid var(--border)', borderRadius: 10 }} onClick={(e)=>e.stopPropagation()}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {sourcePreviewUrl && (<img className="thumb" src={sourcePreviewUrl} alt="Source preview" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border)' }} />)}
-                      <div>
-                        <div className="name" style={{ fontWeight: 700 }}>{sourceFile.name}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>{Math.round(sourceFile.size/1024)} KB · Ready</div>
-                      </div>
-                    </div>
-                    <button type="button" className="btn-ghost btn-sm" onClick={() => setSourceFile(null)}>Remove</button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="uploader">
-              <div
-                className={`dropzone ${isDraggingTarget ? 'dragging' : ''}`}
-                onDragOver={e => { e.preventDefault(); setIsDraggingTarget(true); }}
-                onDragLeave={() => setIsDraggingTarget(false)}
-                onDrop={onDropTarget}
-                onClick={onPickTargetClick}
-                role="button"
-                aria-label="Select or drop target image"
-                tabIndex={0}
-                style={{ position: 'relative' }}
-              >
-                <input
-                  ref={targetInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={e => setTargetFile(e.target.files?.[0] || null)}
-                />
-                {!targetFile && (
-                  <div className="dz-inner">
-                    <div className="dz-title">Target image</div>
-                    <div className="dz-sub">Drag & drop or click to select</div>
-                  </div>
-                )}
-                {targetFile && (
-                  <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 10px', background: 'rgba(17,24,39,0.75)', border: '1px solid var(--border)', borderRadius: 10 }} onClick={(e)=>e.stopPropagation()}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {targetPreviewUrl && (<img className="thumb" src={targetPreviewUrl} alt="Target preview" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border)' }} />)}
-                      <div>
-                        <div className="name" style={{ fontWeight: 700 }}>{targetFile.name}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>{Math.round(targetFile.size/1024)} KB · Ready</div>
-                      </div>
-                    </div>
-                    <button type="button" className="btn-ghost btn-sm" onClick={() => setTargetFile(null)}>Remove</button>
-                  </div>
-                )}
-              </div>
-            </div>
-        </div>
-
-          <label>
-            Goal
-            <textarea rows={3} value={goal} onChange={e => setGoal(e.target.value)} required />
-          </label>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
-            <button type="button" className="btn-ghost" onClick={() => setStep('choose')} disabled={loading}>Back</button>
-            <div style={{ display: 'flex', gap: 10 }}>
-              {(sourceFile || targetFile) && (
-                <button className="btn-ghost" type="button" onClick={() => { setSourceFile(null); setTargetFile(null); setUploadPct(0); }}>Clear files</button>
-              )}
-              <button className="btn-primary" disabled={loading} type="submit">{loading ? (sourceFile && targetFile ? `Uploading ${uploadPct}%…` : 'Running…') : 'Continue'}</button>
-            </div>
-        </div>
-      </form>
-      </div>
-    );
-  }
-
-  function renderDone() {
-    return (
-      <div className="tile">
-        {/* Header: run id only */}
-        <div className="muted" style={{ marginBottom: 6 }}>
-          <span>Run Id: </span>
-          <span style={{ opacity: .9 }}>{activeRunId || '-'}</span>
-        </div>
-        {/* Status + inline timer (timer aligned to right) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 16 }}>
-          <div>
-          {(() => {
-            const k = String(activeRunStatus || '').toUpperCase();
-            const color = (k === 'COMPLETED')
-              ? '#10b981'
-              : (k === 'FAILED')
-                ? '#ef4444'
-                : ((k === 'INPROGRESS' || k === 'IN_PROGRESS' || k === 'IN-PROGRESS') ? '#f59e0b' : 'var(--muted)');
-              const label = k || 'STARTED';
-              return (
-                <>
-                  <span>Status: </span>
-                  <span style={{ color, fontWeight: 700 }}>{label}</span>
-                </>
-              );
-            })()}
-          </div>
-          {String(activeRunStatus || '').toUpperCase().startsWith('IN') ? (
-            <span style={{ fontVariantNumeric: 'tabular-nums', color: '#cbd5e1' }}>{formatElapsed(runElapsedSec)}</span>
-          ) : <span />}
-        </div>
-        {String(activeRunStatus || '').toUpperCase() === 'INPROGRESS' && (
-          <div className="progress indeterminate ice" style={{ marginTop: 12 }}>
-            <span style={{ width: '100%' }} />
-          </div>
-        )}
-        {String(activeRunStatus || '').toUpperCase() === 'COMPLETED' && (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Link className="btn-ghost" href="/reports">View Result</Link>
-        </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderPersonas() {
-    return (
-      <PersonaPicker onLaunch={(configs, exclusive) => launchRun(configs as any, exclusive)} onBack={() => setStep('tests')} />
-    );
-  }
-
+export default function LaunchTestPage() {
   return (
-    <div>
-      <div className="dash-header">Launch Test</div>
-      {bootLoading ? (
-        <div className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160 }}>
-          <div className="spinner" />
+    <>
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="page-title">Home</h1>
+            <p className="meta">Start new tests, manage personas, and resume projects.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/configure-persona"><button className="btn btn-secondary">Manage Personas</button></Link>
+            <Link href="/configure-test"><button className="btn btn-primary">New Project</button></Link>
+          </div>
         </div>
-      ) : (
-        <>
-          <div className="tile" style={{ marginBottom: 12, padding: 12, minHeight: 'unset' as any }}>
-        <StepIndicator
-          steps={[
-            { label: 'Project' },
-                { label: 'Test Setup' },
-                { label: 'Personas' },
-            { label: 'Results' },
-          ]}
-              activeIndex={(step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3}
-              onStepClick={(idx) => {
-                // Only allow navigating to current/past steps
-                const currentIdx = (step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3;
-                if (idx > currentIdx) return;
-                if (idx === 0) setStep('choose');
-                else if (idx === 1) setStep('tests');
-                else if (idx === 2) setStep('personas');
-                else setStep('done');
-              }}
-        />
+      </header>
+
+      <div className="max-w-7xl mx-auto px-6">
+        <section className="py-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-card">
+            <h3 className="section-title mb-2">Projects</h3>
+            <div className="text-2xl font-semibold text-slate-900">12 <span className="meta">total</span></div>
+            <div className="mt-2 flex gap-2 text-sm">
+              <span className="chip chip-success">7 ready</span>
+              <span className="chip chip-pending">3 processing</span>
+              <span className="chip chip-warn">2 re-index</span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-card">
+            <h3 className="section-title mb-2">Personas</h3>
+            <p className="text-slate-800">Active set: <span className="font-medium">Default</span></p>
+            <div className="mt-3 flex gap-2">
+              <span className="chip chip-pending">New</span>
+              <span className="chip chip-pending">Returning</span>
+              <span className="chip chip-pending">Streamliners</span>
+              <span className="chip chip-pending">+3 more</span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-card">
+            <h3 className="section-title mb-2">Runs (24h)</h3>
+            <div className="flex gap-6 text-slate-800">
+              <div><div className="text-2xl font-semibold">18</div><div className="meta">completed</div></div>
+              <div><div className="text-2xl font-semibold">4</div><div className="meta">queued</div></div>
+              <div><div className="text-2xl font-semibold">1</div><div className="meta">failed</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="section-title">Projects</h3>
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white">
+              <svg className="h-4 w-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 21l-4.3-4.3M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/></svg>
+              <input className="input border-0 h-auto p-0" placeholder="Search projects" />
+            </div>
+            <button className="btn btn-secondary">Filters</button>
+            <button className="btn btn-secondary">Sort</button>
+          </div>
+        </div>
+
+        {/* Row */}
+        <div className="row">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <a className="text-slate-900 font-medium truncate hover:underline">Acme Checkout</a>
+              <span className="chip chip-success">Ready</span>
+            </div>
+            <div className="meta mt-0.5">Design v23 · 4 goals · Updated 2h ago</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-secondary">Open</button>
+            <button className="btn btn-ghost">Results</button>
+          </div>
+        </div>
+
+        {/* Processing row example */}
+        <div className="row">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <a className="text-slate-900 font-medium hover:underline">Search &amp; Filter</a>
+              <span className="chip chip-pending">Processing…</span>
+            </div>
+            <div className="meta mt-0.5">Design v7 · 3 goals · Updated 9:10 AM</div>
+            <div className="mt-2 progress">
+              <div className="progress-bar w-[42%]"></div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-secondary">Open</button>
+            <button className="btn btn-ghost">Results</button>
+          </div>
+        </div>
+
+        {/* Needs re-index example */}
+        <div className="row">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <a className="text-slate-900 font-medium hover:underline">Onboarding</a>
+              <span className="chip chip-warn">Needs re-index</span>
+            </div>
+            <div className="meta mt-0.5">Design v12 · 2 goals · Updated 1d ago</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-secondary">Open</button>
+            <button className="btn btn-ghost">Re-index</button>
+          </div>
+        </div>
+        </section>
+
+        <section className="py-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="section-title">Recent runs</h3>
+            <button className="btn btn-ghost">View all</button>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="text-left px-4 py-2.5">Project</th>
+                  <th className="text-left px-4 py-2.5">Goal</th>
+                  <th className="text-left px-4 py-2.5">Personas</th>
+                  <th className="text-left px-4 py-2.5">Status</th>
+                  <th className="text-right px-4 py-2.5">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-2.5">Acme Checkout</td>
+                  <td className="px-4 py-2.5">Checkout</td>
+                  <td className="px-4 py-2.5">New + Returning</td>
+                  <td className="px-4 py-2.5"><span className="chip chip-success">Done</span></td>
+                  <td className="px-4 py-2.5 text-right">10:12 AM</td>
+                </tr>
+                <tr className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-2.5">Search &amp; Filter</td>
+                  <td className="px-4 py-2.5">Find a product</td>
+                  <td className="px-4 py-2.5">Streamliners</td>
+                  <td className="px-4 py-2.5"><span className="chip chip-pending">Queued</span></td>
+                  <td className="px-4 py-2.5 text-right">9:45 AM</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
-      {step === 'choose' && renderChoose()}
-      {step === 'preprocess' && renderPreprocess()}
-      {step === 'tests' && renderTests()}
-          {step === 'personas' && renderPersonas()}
-      {step === 'done' && renderDone()}
-        </>
-      )}
-    </div>
+    </>
   );
 }
-
-
