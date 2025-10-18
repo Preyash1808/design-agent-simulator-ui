@@ -48,8 +48,8 @@ export default function FancySelect({ options, value, placeholder = 'Select…',
         style={{
           width: '100%', textAlign: 'left',
           background: '#FFFFFF', border: '1px solid var(--border)',
-          borderRadius: 12, padding: '12px 14px', color: 'var(--text)',
-          fontWeight: 700
+          borderRadius: 12, padding: '18px 20px', color: 'var(--text)',
+          fontWeight: 700, fontSize: '15px', minHeight: '56px'
         }}
       >
         <span className={`select-value${activeLabel ? '' : ' placeholder'}`} style={{ color: activeLabel ? 'var(--text)' : 'var(--muted)' }}>

@@ -8,9 +8,9 @@ export const runtime = 'nodejs';
 
 function findConfigPath(): string | null {
   const candidates = [
+    path.resolve(process.cwd(), '..', 'config', 'persona_configs.json'),
     path.resolve(process.cwd(), '..', '..', 'config', 'persona_configs.json'),
     path.resolve(process.cwd(), 'config', 'persona_configs.json'),
-    path.resolve(process.cwd(), '..', 'config', 'persona_configs.json'),
   ];
   for (const p of candidates) {
     const dir = path.dirname(p);

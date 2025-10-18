@@ -8,6 +8,7 @@ export const runtime = 'nodejs';
 
 function findPersonaPath(): string | null {
   const candidates = [
+    path.resolve(process.cwd(), '..', 'users', 'users.json'),
     path.resolve(process.cwd(), '..', '..', 'users', 'users.json'),
     path.resolve(process.cwd(), 'users', 'users.json'),
     '/Users/ankita/Documents/workspace/design-agent-simulator/users/users.json',

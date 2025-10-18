@@ -19,7 +19,17 @@ export default function ConfigurePersonaPage() {
     let mounted = true;
     (async () => {
       try {
-        const r = await fetch('/api/persona_list', { cache: 'no-store' });
+        // Get auth token
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const headers: Record<string, string> = { 'Accept': 'application/json' };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const r = await fetch('/api/user_personas', {
+          cache: 'no-store',
+          headers
+        });
         const data = await r.json();
         const list: any[] = Array.isArray(data?.personas) ? data.personas : [];
         if (!mounted) return;
@@ -107,18 +117,24 @@ export default function ConfigurePersonaPage() {
     setLoading(true);
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const updatedCards = [...cards];
 
-      // Save each new persona to users.json via POST endpoint
+      // Save each new persona to user_personas via POST endpoint
       for (let i = 0; i < cards.length; i++) {
         const c = cards[i];
         const resolved = resolveFromInput(c.personaId);
 
         // Only create new personas (not existing ones with numeric IDs)
         if (resolved.personaId === null && resolved.name.trim()) {
-          const response = await fetch('/api/persona_list', {
+          const response = await fetch('/api/user_personas', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
               persona: {
                 name: resolved.name,
@@ -140,7 +156,14 @@ export default function ConfigurePersonaPage() {
       }
 
       // Refresh personas list from API to get newly created personas
-      const r = await fetch(`/api/persona_list?t=${Date.now()}`, { cache: 'no-store' });
+      const refreshHeaders: Record<string, string> = { 'Accept': 'application/json' };
+      if (token) {
+        refreshHeaders['Authorization'] = `Bearer ${token}`;
+      }
+      const r = await fetch(`/api/user_personas?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: refreshHeaders
+      });
       const data = await r.json();
       const list: any[] = Array.isArray(data?.personas) ? data.personas : [];
       const mapped: Persona[] = list.map((p: any) => ({

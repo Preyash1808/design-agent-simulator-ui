@@ -622,7 +622,6 @@ export default function ReportsPage() {
   const recommendationsByScreen = useMemo<RecGroup[]>(() => {
     try {
       const arr = (metrics as any)?.recommendations_by_screen as Array<any> | undefined;
-      console.log('Recommendations by screen - raw data:', arr);
       if (!Array.isArray(arr) || arr.length === 0) return [] as RecGroup[];
       const mapped = arr.map((g: any) => ({
         screenId: String(g.screenId || g.screen_id || ''),
@@ -631,7 +630,6 @@ export default function ReportsPage() {
         totalCount: Number(g.totalCount || g.total || 0),
         items: Array.isArray(g.items) ? g.items.map((it: any) => ({ text: String(it.text || ''), count: Number(it.count || 0), personas: Array.isArray(it.personas) ? it.personas.map((p:string)=>String(p)) : [], raw: String(it.text_raw || it.text || '') })) : [],
       })) as RecGroup[];
-      console.log('Recommendations by screen - mapped:', mapped);
       return mapped;
     } catch { return [] as RecGroup[]; }
   }, [metrics]);
@@ -1296,8 +1294,8 @@ export default function ReportsPage() {
       )}
 
       <div className="grid" style={{ gap: 12, marginTop: 12 }}>
-        <div className="row" style={{ gridTemplateColumns: '1fr 1fr' }}>
-          <label>
+        <div className="row" style={{ gridTemplateColumns: '2fr 2fr', gap: 16 }}>
+          <label style={{ fontSize: 14, fontWeight: 600 }}>
             Project
             <FancySelect
               value={selectedProject}
@@ -1312,7 +1310,7 @@ export default function ReportsPage() {
               searchable={false}
             />
           </label>
-          <label>
+          <label style={{ fontSize: 14, fontWeight: 600 }}>
             Goal
             <FancySelect
               value={selectedGoal}

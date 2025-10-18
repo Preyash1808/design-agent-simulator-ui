@@ -1,7 +1,6 @@
 "use client";
 import React from 'react';
 import { IconChevronRight, IconChevronDown } from '../icons';
-import PersonaModal from '../PersonaModal';
 import Link from 'next/link';
 
 type Persona = { id: string; name: string; bio?: string };
@@ -12,8 +11,6 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
   const [cards, setCards] = React.useState<PersonaConfig[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [exclusiveUsers, setExclusiveUsers] = React.useState<boolean>(false);
-  const [selectedPersona, setSelectedPersona] = React.useState<Persona | null>(null);
-  const [isModalOpen, setIsModalOpen] = React.useState<boolean>(false);
   const [searchQuery, setSearchQuery] = React.useState<string>('');
   const [selectedPersonas, setSelectedPersonas] = React.useState<Map<string, number>>(new Map());
 
@@ -21,13 +18,48 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
     let mounted = true;
     (async () => {
       try {
-        const r = await fetch('/api/persona_list', { cache: 'no-store' });
+        // Get auth token
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const headers: Record<string, string> = { 'Accept': 'application/json' };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const r = await fetch('/api/user_personas', {
+          cache: 'no-store',
+          headers
+        });
         const data = await r.json();
         const list: any[] = Array.isArray(data?.personas) ? data.personas : [];
         if (!mounted) return;
         const mapped: Persona[] = list.map((p: any) => ({ id: String(p.id ?? p.persona_id ?? ''), name: String(p.name ?? p.persona_name ?? `Persona ${p.id ?? ''}`), bio: p.bio }));
         setPersonas(mapped);
-        // Initialize with one empty card
+
+        // Try to load saved persona configurations from API first
+        try {
+          const configRes = await fetch('/api/persona_configs', { cache: 'no-store' });
+          if (configRes.ok) {
+            const configData = await configRes.json();
+            if (Array.isArray(configData?.configs) && configData.configs.length > 0) {
+              // Pre-populate selectedPersonas map from saved configs
+              const preselected = new Map<string, number>();
+              for (const config of configData.configs) {
+                const personaId = String(config.personaId || '').trim();
+                const users = Number(config.users || 0);
+                if (personaId && users > 0) {
+                  preselected.set(personaId, users);
+                }
+              }
+              if (preselected.size > 0) {
+                setSelectedPersonas(preselected);
+              }
+              setExclusiveUsers(!!configData.exclusiveUsers);
+              return;
+            }
+          }
+        } catch {}
+
+        // Initialize with one empty card if no saved config
         setCards([{ personaId: '', traits: '', users: '', collapsed: false }]);
       } catch {
         if (!mounted) return;
@@ -153,19 +185,6 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
     setLoading(false);
   }
 
-  function openPersonaModal(personaId: string) {
-    const persona = personas.find(p => p.id === personaId);
-    if (persona) {
-      setSelectedPersona(persona);
-      setIsModalOpen(true);
-    }
-  }
-
-  function closeModal() {
-    setIsModalOpen(false);
-    setSelectedPersona(null);
-  }
-
   const filteredPersonas = personas.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.bio && p.bio.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -242,13 +261,6 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
                           />
                           <span className="text-slate-900 font-medium truncate">{persona.name}</span>
                         </label>
-                        <span className="chip chip-neutral">Focus-driven</span>
-                        <button
-                          className="text-xs text-slate-600 hover:text-slate-900"
-                          onClick={() => openPersonaModal(persona.id)}
-                        >
-                          Details
-                        </button>
                       </div>
                       <div className="meta mt-1 truncate" title={persona.bio || ''}>
                         {persona.bio || 'No description available'}
@@ -349,19 +361,11 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path d="M9 5l7 7-7 7"/>
               </svg>
-              Next: Define Goal & Screens
+              Next: Define Task & Screens
             </div>
           </div>
         </aside>
       </main>
-
-      {selectedPersona && (
-        <PersonaModal
-          persona={selectedPersona}
-          isOpen={isModalOpen}
-          onClose={closeModal}
-        />
-      )}
     </>
   );
 }

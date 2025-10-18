@@ -33,19 +33,20 @@ export default function CreateRunUnifiedPage() {
   const sourcePreviewUrl = useMemo(() => sourceFile ? URL.createObjectURL(sourceFile) : null, [sourceFile]);
   const targetPreviewUrl = useMemo(() => targetFile ? URL.createObjectURL(targetFile) : null, [targetFile]);
 
-  // Multi-goal state
-  type GoalItem = {
+  // Multi-task state
+  type TaskItem = {
     id: string;
-    goal: string;
+    taskName: string;
+    task: string;
     sourceFile: File | null;
     targetFile: File | null;
     sourcePreview: string | null;
     targetPreview: string | null;
   };
-  const [goals, setGoals] = useState<GoalItem[]>([
-    { id: crypto.randomUUID(), goal: '', sourceFile: null, targetFile: null, sourcePreview: null, targetPreview: null }
+  const [tasks, setTasks] = useState<TaskItem[]>([
+    { id: crypto.randomUUID(), taskName: '', task: '', sourceFile: null, targetFile: null, sourcePreview: null, targetPreview: null }
   ]);
-  const [expandedGoalId, setExpandedGoalId] = useState<string>(goals[0]?.id || '');
+  const [expandedTaskId, setExpandedTaskId] = useState<string>(tasks[0]?.id || '');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeRunStatus, setActiveRunStatus] = useState<string | null>(null);
   const [activeRunLog, setActiveRunLog] = useState<string | null>(null);
@@ -59,6 +60,7 @@ export default function CreateRunUnifiedPage() {
   const [bootLoading, setBootLoading] = useState(true);
   const [completedProjectIds, setCompletedProjectIds] = useState<string[]>([]);
   const [defaultCompletedProjectId, setDefaultCompletedProjectId] = useState('');
+  const [hasAnyProjects, setHasAnyProjects] = useState<boolean>(true);
 
   const unifiedEnabled = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_UNIFIED_FLOW === '1' || process.env.NEXT_PUBLIC_UNIFIED_FLOW === 'true') : true;
   const STATE_KEY = 'sparrow_launch_state_v1';
@@ -116,8 +118,12 @@ export default function CreateRunUnifiedPage() {
         const r = await fetch('/api/projects', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
         const data = await r.json();
         const list: any[] = Array.isArray(data?.projects) ? data.projects : [];
-        setAllProjects(list.map(p => ({ id: String(p.id), name: String(p.name||p.id) })));
-      } catch {}
+        const mappedProjects = list.map(p => ({ id: String(p.id), name: String(p.name||p.id) }));
+        setAllProjects(mappedProjects);
+        setHasAnyProjects(mappedProjects.length > 0);
+      } catch {
+        setHasAnyProjects(false);
+      }
     })();
     // Land on Results if latest run is INPROGRESS, or if latest COMPLETED finished within last 5 minutes
     (async () => {
@@ -616,31 +622,32 @@ export default function CreateRunUnifiedPage() {
   }
   const uploading = loading && !!sourceFile && !!targetFile;
 
-  function addNewGoal() {
-    const newGoal: GoalItem = {
+  function addNewTask() {
+    const newTask: TaskItem = {
       id: crypto.randomUUID(),
-      goal: '',
+      taskName: '',
+      task: '',
       sourceFile: null,
       targetFile: null,
       sourcePreview: null,
       targetPreview: null
     };
-    setGoals([...goals, newGoal]);
-    setExpandedGoalId(newGoal.id);
+    setTasks([...tasks, newTask]);
+    setExpandedTaskId(newTask.id);
   }
 
-  function removeGoal(id: string) {
-    if (goals.length === 1) return; // Keep at least one goal
-    setGoals(goals.filter(g => g.id !== id));
-    if (expandedGoalId === id) {
-      setExpandedGoalId(goals.find(g => g.id !== id)?.id || '');
+  function removeTask(id: string) {
+    if (tasks.length === 1) return; // Keep at least one task
+    setTasks(tasks.filter(t => t.id !== id));
+    if (expandedTaskId === id) {
+      setExpandedTaskId(tasks.find(t => t.id !== id)?.id || '');
     }
   }
 
-  function updateGoal(id: string, updates: Partial<GoalItem>) {
-    setGoals(goals.map(g => {
-      if (g.id === id) {
-        const updated = { ...g, ...updates };
+  function updateTask(id: string, updates: Partial<TaskItem>) {
+    setTasks(tasks.map(t => {
+      if (t.id === id) {
+        const updated = { ...t, ...updates };
         // Update preview URLs if files changed
         if (updates.sourceFile !== undefined) {
           updated.sourcePreview = updates.sourceFile ? URL.createObjectURL(updates.sourceFile) : null;
@@ -650,37 +657,37 @@ export default function CreateRunUnifiedPage() {
         }
         return updated;
       }
-      return g;
+      return t;
     }));
   }
 
   function renderTests() {
-    const validateGoals = () => {
-      return goals.every(g => g.goal.trim() && g.sourceFile && g.targetFile);
+    const validateTasks = () => {
+      return tasks.every(t => t.taskName.trim() && t.task.trim() && t.sourceFile && t.targetFile);
     };
 
     return (
       <div className="tile">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h3 style={{ margin: 0 }}>Test Goals</h3>
+          <h3 style={{ margin: 0 }}>Test Tasks</h3>
           <button
             type="button"
             className="btn-ghost btn-sm"
-            onClick={addNewGoal}
+            onClick={addNewTask}
             style={{ display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <IconPlus width={16} height={16} /> Add Goal
+            <IconPlus width={16} height={16} /> Add Task
           </button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          {goals.map((goalItem, index) => {
-            const isExpanded = expandedGoalId === goalItem.id;
-            const isComplete = goalItem.goal.trim() && goalItem.sourceFile && goalItem.targetFile;
+          {tasks.map((taskItem, index) => {
+            const isExpanded = expandedTaskId === taskItem.id;
+            const isComplete = taskItem.taskName.trim() && taskItem.task.trim() && taskItem.sourceFile && taskItem.targetFile;
 
             return (
               <div
-                key={goalItem.id}
+                key={taskItem.id}
                 style={{
                   background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(249,250,251,1))',
                   border: isExpanded ? '2px solid #3B82F6' : '1px solid var(--border)',
@@ -689,7 +696,7 @@ export default function CreateRunUnifiedPage() {
                   transition: 'all 0.2s ease'
                 }}
               >
-                {/* Goal Header */}
+                {/* Task Header */}
                 <div
                   style={{
                     display: 'flex',
@@ -697,7 +704,7 @@ export default function CreateRunUnifiedPage() {
                     justifyContent: 'space-between',
                     cursor: 'pointer'
                   }}
-                  onClick={() => setExpandedGoalId(isExpanded ? '' : goalItem.id)}
+                  onClick={() => setExpandedTaskId(isExpanded ? '' : taskItem.id)}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{
@@ -716,7 +723,7 @@ export default function CreateRunUnifiedPage() {
                     </div>
                     <div>
                       <div style={{ fontWeight: 700, color: 'var(--text)' }}>
-                        {goalItem.goal.trim() || `Goal ${index + 1}`}
+                        {taskItem.taskName.trim() || `Task ${index + 1}`}
                       </div>
                     </div>
                   </div>
@@ -734,10 +741,10 @@ export default function CreateRunUnifiedPage() {
                         ✓ Complete
                       </span>
                     )}
-                    {goals.length > 1 && (
+                    {tasks.length > 1 && (
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); removeGoal(goalItem.id); }}
+                        onClick={(e) => { e.stopPropagation(); removeTask(taskItem.id); }}
                         style={{
                           background: 'transparent',
                           border: '1px solid var(--border)',
@@ -761,13 +768,31 @@ export default function CreateRunUnifiedPage() {
                 {/* Expanded Content */}
                 {isExpanded && (
                   <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                    {/* Goal Description */}
+                    {/* Task Name */}
                     <label style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>Goal Description</span>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>Task Name</span>
+                      <input
+                        type="text"
+                        value={taskItem.taskName}
+                        onChange={e => updateTask(taskItem.id, { taskName: e.target.value })}
+                        placeholder="e.g., Complete checkout process"
+                        style={{
+                          background: '#FFFFFF',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          padding: 12,
+                          fontSize: 14
+                        }}
+                      />
+                    </label>
+
+                    {/* Task Description */}
+                    <label style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>Task Description</span>
                       <textarea
                         rows={3}
-                        value={goalItem.goal}
-                        onChange={e => updateGoal(goalItem.id, { goal: e.target.value })}
+                        value={taskItem.task}
+                        onChange={e => updateTask(taskItem.id, { task: e.target.value })}
                         placeholder="Describe what the user should accomplish..."
                         style={{
                           background: '#FFFFFF',
@@ -793,7 +818,7 @@ export default function CreateRunUnifiedPage() {
                             input.accept = 'image/*';
                             input.onchange = (e: any) => {
                               const file = e.target?.files?.[0];
-                              if (file) updateGoal(goalItem.id, { sourceFile: file });
+                              if (file) updateTask(taskItem.id, { sourceFile: file });
                             };
                             input.click();
                           }}
@@ -805,20 +830,20 @@ export default function CreateRunUnifiedPage() {
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: 'pointer',
-                            background: goalItem.sourcePreview ? `url(${goalItem.sourcePreview}) center/cover` : '#F8FAFC',
+                            background: taskItem.sourcePreview ? `url(${taskItem.sourcePreview}) center/cover` : '#F8FAFC',
                             position: 'relative',
                             transition: 'all 0.2s ease'
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3B82F6'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                         >
-                          {!goalItem.sourceFile && (
+                          {!taskItem.sourceFile && (
                             <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
                               <div style={{ fontSize: 14, fontWeight: 600 }}>Click to upload</div>
                               <div style={{ fontSize: 12, marginTop: 4 }}>or drag & drop</div>
                             </div>
                           )}
-                          {goalItem.sourceFile && (
+                          {taskItem.sourceFile && (
                             <div style={{
                               position: 'absolute',
                               bottom: 8,
@@ -834,11 +859,11 @@ export default function CreateRunUnifiedPage() {
                             onClick={(e) => e.stopPropagation()}
                             >
                               <div style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 600 }}>
-                                {goalItem.sourceFile.name}
+                                {taskItem.sourceFile.name}
                               </div>
                               <button
                                 type="button"
-                                onClick={() => updateGoal(goalItem.id, { sourceFile: null, sourcePreview: null })}
+                                onClick={() => updateTask(taskItem.id, { sourceFile: null, sourcePreview: null })}
                                 style={{
                                   background: '#EF4444',
                                   color: '#FFFFFF',
@@ -860,7 +885,7 @@ export default function CreateRunUnifiedPage() {
                       {/* Stop Screen */}
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8, color: 'var(--text)' }}>
-                          Stop Screen (Goal)
+                          Stop Screen (Task Complete)
                         </div>
                         <div
                           onClick={() => {
@@ -869,7 +894,7 @@ export default function CreateRunUnifiedPage() {
                             input.accept = 'image/*';
                             input.onchange = (e: any) => {
                               const file = e.target?.files?.[0];
-                              if (file) updateGoal(goalItem.id, { targetFile: file });
+                              if (file) updateTask(taskItem.id, { targetFile: file });
                             };
                             input.click();
                           }}
@@ -881,20 +906,20 @@ export default function CreateRunUnifiedPage() {
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: 'pointer',
-                            background: goalItem.targetPreview ? `url(${goalItem.targetPreview}) center/cover` : '#F8FAFC',
+                            background: taskItem.targetPreview ? `url(${taskItem.targetPreview}) center/cover` : '#F8FAFC',
                             position: 'relative',
                             transition: 'all 0.2s ease'
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3B82F6'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                         >
-                          {!goalItem.targetFile && (
+                          {!taskItem.targetFile && (
                             <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
                               <div style={{ fontSize: 14, fontWeight: 600 }}>Click to upload</div>
                               <div style={{ fontSize: 12, marginTop: 4 }}>or drag & drop</div>
                             </div>
                           )}
-                          {goalItem.targetFile && (
+                          {taskItem.targetFile && (
                             <div style={{
                               position: 'absolute',
                               bottom: 8,
@@ -910,11 +935,11 @@ export default function CreateRunUnifiedPage() {
                             onClick={(e) => e.stopPropagation()}
                             >
                               <div style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 600 }}>
-                                {goalItem.targetFile.name}
+                                {taskItem.targetFile.name}
                               </div>
                               <button
                                 type="button"
-                                onClick={() => updateGoal(goalItem.id, { targetFile: null, targetPreview: null })}
+                                onClick={() => updateTask(taskItem.id, { targetFile: null, targetPreview: null })}
                                 style={{
                                   background: '#EF4444',
                                   color: '#FFFFFF',
@@ -947,8 +972,8 @@ export default function CreateRunUnifiedPage() {
           </button>
           <button
             className="btn-primary"
-            disabled={loading || !validateGoals()}
-            onClick={(e) => { e.preventDefault(); if (validateGoals()) setStep('personas'); }}
+            disabled={loading || !validateTasks()}
+            onClick={(e) => { e.preventDefault(); if (validateTasks()) setStep('personas'); }}
           >
             {loading ? 'Processing...' : 'Continue to Personas'}
           </button>
@@ -1008,40 +1033,78 @@ export default function CreateRunUnifiedPage() {
     );
   }
 
+  function renderEmptyState() {
+    return (
+      <main className="flex-1 flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
+        <div className="max-w-md text-center">
+          <h1 className="text-2xl font-semibold text-slate-900 mb-2">Welcome to AI Usability</h1>
+          <p className="text-slate-600 mb-6">Run usability tests before you launch. Let's set up your first project.</p>
+          <button
+            className="flex items-center gap-2 px-6 py-3 rounded-lg mx-auto transition-colors"
+            style={{ width: 'fit-content', fontSize: '15px', fontWeight: '600', backgroundColor: '#000000', color: '#FFFFFF', border: 'none' }}
+            onClick={() => {
+              setUseExisting(false);
+              setStep('choose');
+            }}
+          >
+            <IconPlus width={20} height={20} /> Create Project
+          </button>
+          <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '1px dashed #CBD5E1', textAlign: 'left' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: '600', color: '#64748B', marginBottom: '12px' }}>How it works</h2>
+            <ol style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#64748B' }}>
+              <li>1️⃣ Connect your Figma design</li>
+              <li>2️⃣ Define tasks and personas</li>
+              <li>3️⃣ Run tests and view results</li>
+            </ol>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Show empty state only when: no projects AND user hasn't started the flow
+  const showEmptyState = !hasAnyProjects && !bootLoading && step === 'choose' && !useExisting && !projectName && !figmaUrl && !page;
+
   return (
     <div>
-      <div className="dash-header">Launch Test</div>
-      {bootLoading ? (
-        <div className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160 }}>
-          <div className="spinner" />
-        </div>
+      {showEmptyState ? (
+        renderEmptyState()
       ) : (
         <>
-          <div className="tile" style={{ marginBottom: 12, padding: 12, minHeight: 'unset' as any }}>
-        <StepIndicator
-          steps={[
-            { label: 'Project' },
-                { label: 'Test Setup' },
-                { label: 'Personas' },
-            { label: 'Results' },
-          ]}
-              activeIndex={(step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3}
-              onStepClick={(idx) => {
-                // Only allow navigating to current/past steps
-                const currentIdx = (step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3;
-                if (idx > currentIdx) return;
-                if (idx === 0) setStep('choose');
-                else if (idx === 1) setStep('tests');
-                else if (idx === 2) setStep('personas');
-                else setStep('done');
-              }}
-        />
-      </div>
-      {step === 'choose' && renderChoose()}
-      {step === 'preprocess' && renderPreprocess()}
-      {step === 'tests' && renderTests()}
-          {step === 'personas' && renderPersonas()}
-      {step === 'done' && renderDone()}
+          <div className="dash-header">Launch Test</div>
+          {bootLoading ? (
+            <div className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160 }}>
+              <div className="spinner" />
+            </div>
+          ) : (
+            <>
+              <div className="tile" style={{ marginBottom: 12, padding: 12, minHeight: 'unset' as any }}>
+            <StepIndicator
+              steps={[
+                { label: 'Project' },
+                    { label: 'Test Setup' },
+                    { label: 'Personas' },
+                { label: 'Results' },
+              ]}
+                  activeIndex={(step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3}
+                  onStepClick={(idx) => {
+                    // Only allow navigating to current/past steps
+                    const currentIdx = (step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3;
+                    if (idx > currentIdx) return;
+                    if (idx === 0) setStep('choose');
+                    else if (idx === 1) setStep('tests');
+                    else if (idx === 2) setStep('personas');
+                    else setStep('done');
+                  }}
+            />
+          </div>
+          {step === 'choose' && renderChoose()}
+          {step === 'preprocess' && renderPreprocess()}
+          {step === 'tests' && renderTests()}
+              {step === 'personas' && renderPersonas()}
+          {step === 'done' && renderDone()}
+            </>
+          )}
         </>
       )}
     </div>
