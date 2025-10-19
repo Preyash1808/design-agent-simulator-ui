@@ -1324,10 +1324,6 @@ export default function ReportsPage() {
             />
           </label>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn-ghost btn-sm" type="button" onClick={openLatestCompleted}>Open latest completed</button>
-          <span className="muted" style={{ fontSize: 12 }}>(or type a Run Id below)</span>
-        </div>
         {(loading || error) && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {loading && <span className="muted">Loading…</span>}
@@ -1373,7 +1369,7 @@ export default function ReportsPage() {
             {/* moved link up to tabs row; keeping spacing compact here */}
             {!metrics ? (
               <div className="tile" style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight: 180 }}>
-                <div className="muted">Pick a project and run, or click "Open latest completed".</div>
+                <div className="muted">Select a project and goal to view metrics.</div>
               </div>
             ) : (
             <>

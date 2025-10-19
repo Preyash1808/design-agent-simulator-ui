@@ -25,14 +25,18 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
           headers['Authorization'] = `Bearer ${token}`;
         }
 
+        console.log('[PersonaPicker] Fetching user personas with token:', token ? 'present' : 'missing');
         const r = await fetch('/api/user_personas', {
           cache: 'no-store',
           headers
         });
+        console.log('[PersonaPicker] Response status:', r.status);
         const data = await r.json();
+        console.log('[PersonaPicker] Response data:', data);
         const list: any[] = Array.isArray(data?.personas) ? data.personas : [];
         if (!mounted) return;
         const mapped: Persona[] = list.map((p: any) => ({ id: String(p.id ?? p.persona_id ?? ''), name: String(p.name ?? p.persona_name ?? `Persona ${p.id ?? ''}`), bio: p.bio }));
+        console.log('[PersonaPicker] Mapped personas:', mapped);
         setPersonas(mapped);
 
         // Try to load saved persona configurations from API first
@@ -148,6 +152,10 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
   }
 
   function launch() {
+    console.log('[PersonaPicker] launch() called');
+    console.log('[PersonaPicker] selectedPersonas:', selectedPersonas);
+    console.log('[PersonaPicker] personas:', personas);
+
     // Validate: at least one persona selected, total users <= 3000
     if (selectedPersonas.size === 0) {
       alert('Please select at least one persona.');
@@ -159,6 +167,7 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
 
     for (const [personaId, users] of selectedPersonas.entries()) {
       const persona = personas.find(p => p.id === personaId);
+      console.log('[PersonaPicker] Processing personaId:', personaId, 'users:', users, 'found persona:', persona);
       if (!persona) continue;
 
       if (!Number.isFinite(users) || users <= 0) {
@@ -175,12 +184,16 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
       });
     }
 
+    console.log('[PersonaPicker] cleaned configs:', cleaned);
+    console.log('[PersonaPicker] total users:', total);
+
     if (total > 3000) {
       alert('Total users across personas cannot exceed 3000.');
       return;
     }
 
     setLoading(true);
+    console.log('[PersonaPicker] Calling onLaunch with:', cleaned, exclusiveUsers);
     onLaunch(cleaned, exclusiveUsers);
     setLoading(false);
   }
@@ -197,21 +210,10 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
     <>
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div>
             <h1 className="page-title">Select Personas for Test</h1>
             <p className="meta">Choose personas and set users per group.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {onBack && (<button type="button" className="btn btn-secondary" onClick={onBack}>Back</button>)}
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={selectedPersonas.size === 0 || loading || isOverLimit}
-              onClick={launch}
-            >
-              {loading ? 'Starting…' : 'Save Selection'}
-            </button>
           </div>
         </div>
       </header>
@@ -347,7 +349,7 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
                 onClick={launch}
                 disabled={selectedPersonas.size === 0 || loading || isOverLimit}
               >
-                {loading ? 'Starting…' : 'Save Selection'}
+                {loading ? 'Starting Test…' : 'Start Test'}
               </button>
             </div>
 

@@ -383,17 +383,51 @@ export default function CreateRunUnifiedPage() {
   }, [step, activeRunId]);
 
   async function launchRun(personaConfigs: { personaId: number; traits: string; users: number }[], exclusiveUsers: boolean) {
-    if (!goal || !sourceFile || !targetFile) return;
+    console.log('[launchRun] Called with personaConfigs:', personaConfigs, 'exclusiveUsers:', exclusiveUsers);
+    console.log('[launchRun] Current state - tasks:', tasks);
+    console.log('[launchRun] Old state - goal:', goal, 'sourceFile:', sourceFile, 'targetFile:', targetFile);
+
+    // Use tasks array if available (new system), otherwise fall back to old goal/sourceFile/targetFile
+    let taskToUse = null;
+    let goalToUse = '';
+    let sourceToUse = null;
+    let targetToUse = null;
+
+    if (tasks && tasks.length > 0) {
+      // Find first valid task with all required fields
+      taskToUse = tasks.find(t => t.taskName.trim() && t.task.trim() && t.sourceFile && t.targetFile);
+      if (taskToUse) {
+        goalToUse = taskToUse.task;
+        sourceToUse = taskToUse.sourceFile;
+        targetToUse = taskToUse.targetFile;
+        console.log('[launchRun] Using task from tasks array:', taskToUse);
+      }
+    }
+
+    // Fallback to old system if tasks not available
+    if (!goalToUse && goal && sourceFile && targetFile) {
+      goalToUse = goal;
+      sourceToUse = sourceFile;
+      targetToUse = targetFile;
+      console.log('[launchRun] Using old goal/sourceFile/targetFile');
+    }
+
+    if (!goalToUse || !sourceToUse || !targetToUse) {
+      console.error('[launchRun] Missing required fields - goalToUse:', goalToUse, 'sourceToUse:', sourceToUse, 'targetToUse:', targetToUse);
+      alert('Please configure the test task and screens before starting the test.');
+      return;
+    }
+
     setLoading(true);
     try {
       const form = new FormData();
       const pid = useExisting ? selectedProjectId : String(preprocessInfo?.db?.project_id || '');
       if (!pid) throw new Error('Missing projectId');
       form.set('projectId', pid);
-      form.set('goal', goal);
+      form.set('goal', goalToUse);
       form.set('maxMinutes', String(2));
-      form.set('source', sourceFile);
-      form.set('target', targetFile);
+      form.set('source', sourceToUse);
+      form.set('target', targetToUse);
       try {
         form.set('personas', JSON.stringify(personaConfigs || []));
         form.set('exclusiveUsers', String(!!exclusiveUsers));

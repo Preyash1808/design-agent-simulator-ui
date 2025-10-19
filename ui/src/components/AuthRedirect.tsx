@@ -1,19 +1,30 @@
 "use client";
 import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 
 export default function AuthRedirect() {
+  const pathname = usePathname();
+
   useEffect(() => {
     function redirectIfLoggedOut() {
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-        if (!token) {
+        const currentPath = pathname || window.location.pathname;
+
+        // Public routes that don't require authentication
+        const publicRoutes = ['/login', '/signup'];
+        const isPublicRoute = publicRoutes.some(route => currentPath.startsWith(route));
+
+        if (!token && !isPublicRoute) {
           if (typeof window !== 'undefined') {
-            // Always land on Dashboard page when logged out/unauthorized
-            window.location.href = '/';
+            // Redirect to login page when not authenticated
+            window.location.href = '/login';
           }
         }
       } catch {}
     }
+
+    redirectIfLoggedOut();
 
     const onAuth = () => redirectIfLoggedOut();
     const onStorage = (e: StorageEvent) => {
@@ -25,7 +36,7 @@ export default function AuthRedirect() {
       window.removeEventListener('authStateChanged', onAuth);
       window.removeEventListener('storage', onStorage);
     };
-  }, []);
+  }, [pathname]);
 
   return null;
 }

@@ -13,7 +13,6 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: '/', label: 'Home', icon: <IconFourSquare width={18} height={18} /> },
   {
     href: '/create-run',
     label: 'Launch Usability Test',
@@ -138,10 +137,10 @@ export default function Sidebar() {
   }, [userLabel]);
 
   const visibleNav = useMemo(() => {
-    // When not signed in: show only Dashboard
-    // When signed in: show Dashboard, Launch Test, and Reports
+    // When not signed in: show no navigation (auth redirect will handle it)
+    // When signed in: show all navigation items
     if (!loggedIn) {
-      return NAV.filter(item => item.href === '/');
+      return [];
     }
     return NAV;
   }, [loggedIn]);
