@@ -7,11 +7,13 @@ export async function POST(req: NextRequest) {
     const runDir = String(form.get('runDir') || '');
     const projectId = String(form.get('projectId') || '');
     const goal = String(form.get('goal') || '');
+    const taskName = String(form.get('taskName') || '');
     const maxMinutes = Number(form.get('maxMinutes') || 2);
     const source = form.get('source') as File | null;
     const target = form.get('target') as File | null;
     const personas = String(form.get('personas') || '');
     const exclusiveUsers = String(form.get('exclusiveUsers') || '');
+    console.log('[UI PROXY DEBUG] taskName from form:', JSON.stringify(taskName));
     if (!goal || !source || !target || (!runDir && !projectId)) return new Response('Missing parameters', { status: 400 });
     if ((source as any)?.size === 0 || (target as any)?.size === 0) return new Response('Empty image file(s)', { status: 400 });
     const api = process.env.SPARROW_API || '';
@@ -20,6 +22,12 @@ export async function POST(req: NextRequest) {
       if (runDir) f.set('runDir', runDir);
       if (projectId) f.set('projectId', projectId);
       f.set('goal', goal);
+      if (taskName) {
+        f.set('taskName', taskName);
+        console.log('[UI PROXY DEBUG] Forwarding taskName to backend:', JSON.stringify(taskName));
+      } else {
+        console.log('[UI PROXY DEBUG] taskName is empty/falsy, not forwarding');
+      }
       f.set('maxMinutes', String(maxMinutes ?? 2));
       const sourceBuf = await source.arrayBuffer();
       const targetBuf = await target.arrayBuffer();
@@ -37,7 +45,7 @@ export async function POST(req: NextRequest) {
     return new Response('SPARROW_API not configured', { status: 500 });
   }
 
-  const { runDir, projectId, sourceId, targetId, goal, maxMinutes } = await req.json();
+  const { runDir, projectId, sourceId, targetId, goal, taskName, maxMinutes } = await req.json();
   if ((!runDir && !projectId) || !sourceId || !targetId || !goal) return new Response('Missing parameters', { status: 400 });
   const api = process.env.SPARROW_API || '';
   if (api) {
@@ -45,7 +53,7 @@ export async function POST(req: NextRequest) {
     const r = await fetch(`${api}/runs/tests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) },
-      body: JSON.stringify({ runDir, projectId, sourceId, targetId, goal, maxMinutes: maxMinutes ?? 2 }),
+      body: JSON.stringify({ runDir, projectId, sourceId, targetId, goal, taskName, maxMinutes: maxMinutes ?? 2 }),
     });
     const ct = r.headers.get('content-type') || 'application/json; charset=utf-8';
     const t = await r.text();

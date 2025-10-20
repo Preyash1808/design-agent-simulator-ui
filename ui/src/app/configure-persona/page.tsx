@@ -3,7 +3,7 @@ import React from 'react';
 import PersonaModal from '../../components/PersonaModal';
 
 type Persona = { id: string; name: string; bio?: string };
-type PersonaConfig = { personaId: string; traits: string; users: string };
+type PersonaConfig = { personaId: string; traits: string; users: string; displayName?: string };
 
 export default function ConfigurePersonaPage() {
   const [personas, setPersonas] = React.useState<Persona[]>([]);
@@ -26,12 +26,18 @@ export default function ConfigurePersonaPage() {
           headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const r = await fetch('/api/user_personas', {
+        // Fetch personas directly from backend proxy /api/personas
+        const r = await fetch('/api/personas', {
           cache: 'no-store',
           headers
         });
         const data = await r.json();
-        const list: any[] = Array.isArray(data?.personas) ? data.personas : [];
+        // Support both shapes: an array or { personas: [...] } or { items: [...] }
+        const list: any[] = Array.isArray(data)
+          ? data
+          : (Array.isArray((data as any)?.personas)
+            ? (data as any).personas
+            : (Array.isArray((data as any)?.items) ? (data as any).items : []));
         if (!mounted) return;
         const mapped: Persona[] = list.map((p: any) => ({
           id: String(p.id ?? p.persona_id ?? ''),
@@ -39,52 +45,29 @@ export default function ConfigurePersonaPage() {
           bio: p.bio
         }));
         setPersonas(mapped);
-
-        // Try to load saved persona configurations from API first
-        try {
-          const configRes = await fetch('/api/persona_configs', { cache: 'no-store' });
-          if (configRes.ok) {
-            const configData = await configRes.json();
-            if (Array.isArray(configData?.configs) && configData.configs.length > 0) {
-              setCards(configData.configs);
-              setExclusiveUsers(!!configData.exclusiveUsers);
-              return;
-            }
-          }
-        } catch {}
-
-        // Fallback to localStorage
-        const saved = localStorage.getItem('sparrow_persona_configs');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setCards(parsed);
-              return;
-            }
-          } catch {}
-        }
-
-        // Initialize with one empty card
-        setCards([{ personaId: '', traits: '', users: '' }]);
+        // Pre-populate cards from existing personas so names show immediately
+        const preCards = list
+          .filter((p: any) => p && (p.id != null || p.persona_id != null))
+          .map((p: any) => ({ personaId: String(p.id ?? p.persona_id ?? ''), traits: String(p.traits ?? ''), users: '', displayName: String(p.name ?? p.persona_name ?? '') } as PersonaConfig));
+        setCards(preCards);
+        if (preCards.length) setSel(0);
       } catch {
         if (!mounted) return;
         setPersonas([]);
-        setCards([{ personaId: '', traits: '', users: '' }]);
+        setCards([{ personaId: '', traits: '', users: '', displayName: '' }]);
       }
     })();
     return () => { mounted = false; };
   }, []);
 
-  function resolveFromInput(input: string): { personaId: number | null; name: string } {
+  function resolveFromInput(input: string): { personaId: string | null; name: string } {
     const t = String(input || '').trim();
     if (!t) return { personaId: null, name: '' };
     const byId = personas.find(p => String(p.id) === t);
-    if (byId) return { personaId: Number(byId.id), name: byId.name };
+    if (byId) return { personaId: String(byId.id), name: byId.name };
     const byName = personas.find(p => String(p.name).toLowerCase() === t.toLowerCase());
-    if (byName) return { personaId: Number(byName.id), name: byName.name };
-    const num = Number(t);
-    if (!Number.isNaN(num) && num > 0) return { personaId: num, name: t };
+    if (byName) return { personaId: String(byName.id), name: byName.name };
+    // If not resolvable, treat as new-by-name
     return { personaId: null, name: t };
   }
 
@@ -93,7 +76,11 @@ export default function ConfigurePersonaPage() {
   }
 
   function addCard() {
-    setCards(list => [...list, { personaId: '', traits: '', users: '' }]);
+    setCards(list => {
+      const next = [...list, { personaId: '', traits: '', users: '', displayName: '' }];
+      setSel(next.length - 1);
+      return next;
+    });
   }
 
   function removeCard(idx: number) {
@@ -118,40 +105,39 @@ export default function ConfigurePersonaPage() {
 
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept':'application/json' };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
       const updatedCards = [...cards];
 
-      // Save each new persona to user_personas via POST endpoint
+      // Upsert each persona by name via backend proxy
       for (let i = 0; i < cards.length; i++) {
-        const c = cards[i];
+        const c = updatedCards[i];
         const resolved = resolveFromInput(c.personaId);
-
-        // Only create new personas (not existing ones with numeric IDs)
-        if (resolved.personaId === null && resolved.name.trim()) {
-          const response = await fetch('/api/user_personas', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              persona: {
-                name: resolved.name,
-                traits: c.traits,
-                bio: c.traits
-              }
-            })
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to create persona');
+        const finalName = (() => {
+          if (resolved.personaId) {
+            const match = personas.find(prs => String(prs.id) === String(resolved.personaId));
+            return (match?.name || resolved.name || String(c.personaId)).trim();
           }
+          return (resolved.name || String(c.personaId)).trim();
+        })();
+        if (!finalName) continue;
 
-          const result = await response.json();
-          // Update the card with the new persona ID
-          updatedCards[i] = { ...c, personaId: String(result.persona.id) };
+        const resp = await fetch('/api/personas/upsert', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name: finalName, traits: c.traits })
+        });
+        if (!resp.ok) {
+          const t = await resp.text();
+          throw new Error(t || 'Failed to upsert persona');
+        }
+        let upserted: any = {};
+        try { upserted = await resp.json(); } catch {}
+        if (upserted && (upserted.id != null)) {
+          updatedCards[i] = { ...c, personaId: String(upserted.id), displayName: finalName };
         }
       }
 
@@ -160,12 +146,17 @@ export default function ConfigurePersonaPage() {
       if (token) {
         refreshHeaders['Authorization'] = `Bearer ${token}`;
       }
-      const r = await fetch(`/api/user_personas?t=${Date.now()}`, {
+      const r = await fetch(`/api/personas?t=${Date.now()}`, {
         cache: 'no-store',
         headers: refreshHeaders
       });
       const data = await r.json();
-      const list: any[] = Array.isArray(data?.personas) ? data.personas : [];
+      // Support both shapes: an array or { personas: [...] } or { items: [...] }
+      const list: any[] = Array.isArray(data)
+        ? data
+        : (Array.isArray((data as any)?.personas)
+          ? (data as any).personas
+          : (Array.isArray((data as any)?.items) ? (data as any).items : []));
       const mapped: Persona[] = list.map((p: any) => ({
         id: String(p.id ?? p.persona_id ?? ''),
         name: String(p.name ?? p.persona_name ?? `Persona ${p.id ?? ''}`),
@@ -176,27 +167,6 @@ export default function ConfigurePersonaPage() {
       // Update cards with new IDs
       setCards(updatedCards);
 
-      // Save to API
-      try {
-        const saveRes = await fetch('/api/persona_configs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            configs: updatedCards,
-            exclusiveUsers
-          })
-        });
-
-        if (!saveRes.ok) {
-          throw new Error('Failed to save to server');
-        }
-      } catch (apiError) {
-        console.warn('Failed to save to API, falling back to localStorage only:', apiError);
-      }
-
-      // Save to localStorage as backup
-      localStorage.setItem('sparrow_persona_configs', JSON.stringify(updatedCards));
-      localStorage.setItem('sparrow_exclusive_users', String(exclusiveUsers));
       setSaveMessage('Configurations saved successfully!');
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (error: any) {
@@ -242,7 +212,7 @@ export default function ConfigurePersonaPage() {
 
                 <div style={{ display: 'grid', gap: '6px', marginBottom: '12px' }}>
                   {cards.map((p, i) => {
-                    const personaName = String(personas.find(prs => String(prs.id) === String(p.personaId))?.name || p.personaId || '').toString() || `Persona ${i + 1}`;
+                    const personaName = String(personas.find(prs => String(prs.id) === String(p.personaId))?.name || p.displayName || '').toString() || `Persona ${i + 1}`;
                     const isActive = sel === i;
                     return (
                       <div
@@ -274,16 +244,30 @@ export default function ConfigurePersonaPage() {
                           {personaName}
                         </div>
 
-                        <button
-                          className="btn-ghost"
-                          style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '6px' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeCard(i);
-                          }}
-                        >
-                          Remove
-                        </button>
+                        <div style={{ display:'inline-flex', gap:6 }}>
+                          <button
+                            className="btn-ghost"
+                            style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '6px' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              (async () => {
+                                try {
+                                  const card = cards[i];
+                                  const resolved = resolveFromInput(card.personaId);
+                                  if (!resolved.personaId) { removeCard(i); return; }
+                                  const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+                                  await fetch(`/api/personas/${encodeURIComponent(resolved.personaId)}`, {
+                                    method: 'DELETE',
+                                    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                                  });
+                                } catch {}
+                                removeCard(i);
+                              })();
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -313,10 +297,14 @@ export default function ConfigurePersonaPage() {
                     Name
                     <input
                       placeholder="e.g., Returning Shopper"
-                      value={selected?.personaId || ""}
+                      value={(() => {
+                        const pid = selected?.personaId || "";
+                        const match = personas.find(prs => String(prs.id) === String(pid));
+                        return selected?.displayName || match?.name || pid;
+                      })()}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setCards(arr => arr.map((it, i) => (i === sel ? { ...it, personaId: v } : it)));
+                        setCards(arr => arr.map((it, i) => (i === sel ? { ...it, personaId: v, displayName: v } : it)));
                       }}
                     />
                   </label>
@@ -356,7 +344,7 @@ export default function ConfigurePersonaPage() {
                   <button
                     type="button"
                     onClick={saveConfigurations}
-                    disabled={loading}
+                    disabled={loading || cards.length === 0}
                     className="btn-primary"
                   >
                     {loading ? 'Saving…' : 'Save Configurations'}

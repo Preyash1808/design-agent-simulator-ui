@@ -280,7 +280,11 @@ async def start_tests(req: TestsReq, bg: BackgroundTasks, authorization: Optiona
         'updated_at': time.time(),
         'log': f"/runs-files/{run_dir.name}/api_tests.log",
     })
-    bg.add_task(tests_job, str(run_dir), req.goal, int(req.max_minutes or 2), req.source_id, req.target_id, None, None, db_run_id)
+    import os as _os
+    if _os.getenv('DISABLE_BACKGROUND', '').lower() in ('1','true','yes','y'):
+        print("[RUNS] bg.add_task skipped (DISABLE_BACKGROUND)")
+    else:
+        bg.add_task(tests_job, str(run_dir), req.goal, int(req.max_minutes or 2), req.source_id, req.target_id, None, None, db_run_id)
     return {'accepted': True, 'run_dir': str(run_dir), 'test_run_id': test_run_id, 'status_url': f"/runs/{run_dir.name}/status", 'log': f"/runs-files/{run_dir.name}/api_tests.log", 'db': {'run_id': db_run_id}}
 
 

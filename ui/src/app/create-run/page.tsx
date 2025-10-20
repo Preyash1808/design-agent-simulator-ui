@@ -82,13 +82,60 @@ export default function LaunchTestPage() {
     return created > last24h;
   });
   const completedRuns = recentRuns.filter(r => String(r.status).toUpperCase() === 'COMPLETED').length;
-  const queuedRuns = recentRuns.filter(r => String(r.status).toUpperCase() === 'QUEUED' || String(r.status).toUpperCase() === 'RUNNING').length;
+  const queuedRuns = recentRuns.filter(r => {
+    const s = String(r.status).toUpperCase();
+    return s === 'QUEUED' || s === 'RUNNING' || s === 'INPROGRESS';
+  }).length;
   const failedRuns = recentRuns.filter(r => String(r.status).toUpperCase() === 'FAILED').length;
 
-  // Filter projects by search
-  const filteredProjects = projects.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Show last 3 projects by their most recent run (any status).
+  // Derive project status from the latest run status.
+  const recentRunsSorted = runs
+    .slice()
+    .sort((a, b) => {
+      const at = new Date(a.updated_at || a.created_at || 0).getTime();
+      const bt = new Date(b.updated_at || b.created_at || 0).getTime();
+      return bt - at;
+    });
+
+  const seenProjects = new Set<string>();
+  const last4CompletedProjects = recentRunsSorted
+    .filter(r => {
+      if (!r.project_id) return false;
+      const pid = String(r.project_id);
+      if (seenProjects.has(pid)) return false;
+      seenProjects.add(pid);
+      return true;
+    })
+    .slice(0, 3)
+    .map(r => {
+      const p = projects.find(pp => String(pp.id) === String(r.project_id));
+      return {
+        id: String(r.project_id),
+        name: p?.name || String(r.name || r.project_name || 'Project'),
+        status: String(r.status || ''),
+        updated_at: r.updated_at || r.created_at,
+        created_at: r.created_at,
+      } as Project;
+    });
+
+  // Decide which list to display:
+  // - If user is searching, search across ALL projects by name
+  // - Otherwise, show the last 3 completed projects derived above
+  const filteredProjects = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length > 0) {
+      const all = projects
+        .filter(p => p.name.toLowerCase().includes(q))
+        .sort((a, b) => {
+          const at = new Date(a.updated_at || a.created_at || 0).getTime();
+          const bt = new Date(b.updated_at || b.created_at || 0).getTime();
+          return bt - at;
+        });
+      return all;
+    }
+    return last4CompletedProjects;
+  })();
 
   // Get recent runs (last 3)
   const recentRunsList = runs.slice(0, 3);

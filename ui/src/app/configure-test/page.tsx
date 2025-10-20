@@ -50,6 +50,7 @@ export default function CreateRunUnifiedPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeRunStatus, setActiveRunStatus] = useState<string | null>(null);
   const [activeRunLog, setActiveRunLog] = useState<string | null>(null);
+  const [activeTaskName, setActiveTaskName] = useState<string>('');
   const [runElapsedSec, setRunElapsedSec] = useState(0);
   const runStartRef = useRef<number | null>(null);
   const [runStartMs, setRunStartMs] = useState<number | null>(null);
@@ -401,6 +402,7 @@ export default function CreateRunUnifiedPage() {
         sourceToUse = taskToUse.sourceFile;
         targetToUse = taskToUse.targetFile;
         console.log('[launchRun] Using task from tasks array:', taskToUse);
+        setActiveTaskName(String(taskToUse.taskName || ''));
       }
     }
 
@@ -424,7 +426,8 @@ export default function CreateRunUnifiedPage() {
       const pid = useExisting ? selectedProjectId : String(preprocessInfo?.db?.project_id || '');
       if (!pid) throw new Error('Missing projectId');
       form.set('projectId', pid);
-      form.set('goal', goalToUse);
+      form.set('goal', goalToUse); // maps to Task Description
+      try { if (taskToUse?.taskName) form.set('taskName', String(taskToUse.taskName)); } catch {}
       form.set('maxMinutes', String(2));
       form.set('source', sourceToUse);
       form.set('target', targetToUse);
@@ -708,7 +711,10 @@ export default function CreateRunUnifiedPage() {
             type="button"
             className="btn-ghost btn-sm"
             onClick={addNewTask}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 0.6, cursor: 'not-allowed' }}
+            disabled
+            aria-disabled="true"
+            title="Task creation is disabled in this build"
           >
             <IconPlus width={16} height={16} /> Add Task
           </button>
@@ -1020,10 +1026,17 @@ export default function CreateRunUnifiedPage() {
     return (
       <div className="tile">
         {/* Header: run id only */}
-        <div className="muted" style={{ marginBottom: 6 }}>
-          <span>Run Id: </span>
-          <span style={{ opacity: .9 }}>{activeRunId || '-'}</span>
-        </div>
+        {activeTaskName ? (
+          <div className="muted" style={{ marginBottom: 6 }}>
+            <span>Task: </span>
+            <span style={{ opacity: .9, fontWeight: 700 }}>{activeTaskName}</span>
+          </div>
+        ) : (
+          <div className="muted" style={{ marginBottom: 6 }}>
+            <span>Run Id: </span>
+            <span style={{ opacity: .9 }}>{activeRunId || '-'}</span>
+          </div>
+        )}
         {/* Status + inline timer (timer aligned to right) */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 16 }}>
           <div>

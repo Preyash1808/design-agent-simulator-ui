@@ -170,7 +170,7 @@ export default function Sidebar() {
 
               {/* Sub-items */}
               {item.subItems && !collapsed && (
-                <div style={{ marginLeft: 30, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ marginLeft: 44, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {item.subItems.map(subItem => {
                     const subActive = normalizedPath === subItem.href || normalizedPath.startsWith(subItem.href + '/');
                     return (
@@ -208,7 +208,7 @@ export default function Sidebar() {
             opacity: 0.8,
             transition: 'opacity 0.2s'
           }}
-onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => { (e.currentTarget.style as any).opacity = '1'; }}
+          onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => { (e.currentTarget.style as any).opacity = '1'; }}
           onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => { (e.currentTarget.style as any).opacity = '0.8'; }}
           title="Recent Activity"
         >

@@ -2080,7 +2080,11 @@ async def start_preprocess(req: PreprocessReq, authorization: Optional[str] = He
             fail_process(f"preprocess_job failed: {e}")
 
     # ✅ schedule background task without blocking
-    asyncio.create_task(_deferred_work())
+    import os as _os
+    if _os.getenv('DISABLE_BACKGROUND', '').lower() in ('1','true','yes','y'):
+        log_message("Background task scheduling skipped (DISABLE_BACKGROUND)")
+    else:
+        asyncio.create_task(_deferred_work())
     log_message("Background task scheduled.")
 
     # immediate response
@@ -2295,12 +2299,16 @@ async def start_tests_by_images(
 
     #bg.add_task(tests_job, str(run_dir), goal, int(maxMinutes or 2), None, None, str(source_path), str(target_path), db_run_id)
 
-    asyncio.create_task(
-        tests_job(
-            str(run_dir), goal, int(maxMinutes or 2),
-            None, None, str(source_path), str(target_path), db_run_id
+    import os as _os
+    if _os.getenv('DISABLE_BACKGROUND', '').lower() in ('1','true','yes','y'):
+        log_message("tests_job scheduling skipped (DISABLE_BACKGROUND)")
+    else:
+        asyncio.create_task(
+            tests_job(
+                str(run_dir), goal, int(maxMinutes or 2),
+                None, None, str(source_path), str(target_path), db_run_id
+            )
         )
-    )
 
     return {
         'accepted': True,

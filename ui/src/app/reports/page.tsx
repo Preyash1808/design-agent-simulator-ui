@@ -132,7 +132,7 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RunMetrics | null>(null);
   const [lastRequested, setLastRequested] = useState<string>("");
-  const [goals, setGoals] = useState<Array<{ id: string; goal: string; run_dir?: string }>>([]);
+  const [goals, setGoals] = useState<Array<{ id: string; goal: string; run_dir?: string; task_id?: number|null; task_name?: string|null }>>([]);
   const [selectedGoal, setSelectedGoal] = useState("");
   const [tab, setTab] = useState<'overview'|'persona'>('overview');
   const [fbFilter, setFbFilter] = useState<string>("");
@@ -1197,6 +1197,7 @@ export default function ReportsPage() {
         if (!last?.id) return;
         setSelectedProject(String(last.project_id || ''));
         setRunQuery(String(last.id));
+        setSelectedGoal(String(last.id));
         // Fetch metrics immediately
         loadMetrics(String(last.id));
       } catch (e) {}
@@ -1227,17 +1228,33 @@ export default function ReportsPage() {
           String(item.type).toLowerCase() === 'run' &&
           String(item.project_id) === selectedProject
         );
-        // Create unique goals array with run IDs and run_dir
+        // Create unique goals array with run IDs, run_dir and optional task metadata
         const goalsMap = new Map();
         projectRuns.forEach((run: any) => {
           const runId = String(run.id || run.run_id || '');
           const goalText = String(run.goal || '');
           const runDir = run.run_dir ? String(run.run_dir) : undefined;
+          const taskId = (run.task_id !== undefined && run.task_id !== null) ? Number(run.task_id) : null;
+          const taskName = (run.task_name !== undefined && run.task_name !== null) ? String(run.task_name) : null;
           if (runId && !goalsMap.has(runId)) {
-            goalsMap.set(runId, { id: runId, goal: goalText, run_dir: runDir });
+            goalsMap.set(runId, { id: runId, goal: goalText, run_dir: runDir, task_id: taskId, task_name: taskName });
           }
         });
-        setGoals(Array.from(goalsMap.values()));
+        const goalsArr = Array.from(goalsMap.values());
+        setGoals(goalsArr);
+
+        // If no selection yet, choose the latest COMPLETED run for this project
+        if (!selectedGoal) {
+          try {
+            const completedRuns = projectRuns.filter((x: any) => String(x.status).toUpperCase() === 'COMPLETED');
+            completedRuns.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+            const latest = completedRuns[0];
+            if (latest?.id) {
+              setSelectedGoal(String(latest.id));
+              setRunQuery(String(latest.id));
+            }
+          } catch {}
+        }
 
         // Build map DB project id -> filesystem slug using project items
         const slugMap: Record<string, string> = {};
@@ -1358,8 +1375,8 @@ export default function ReportsPage() {
       )}
 
       <div className="grid" style={{ gap: 12, marginTop: 12 }}>
-        <div className="row" style={{ gridTemplateColumns: '2fr 2fr', gap: 16 }}>
-          <label style={{ fontSize: 14, fontWeight: 600 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <label style={{ fontSize: 14, fontWeight: 700 }}>
             Project
             <FancySelect
               value={selectedProject}
@@ -1372,19 +1389,31 @@ export default function ReportsPage() {
               placeholder="Select project"
               options={projects.map(p => ({ value: p.id, label: p.name }))}
               searchable={false}
+              compact
             />
           </label>
-          <label style={{ fontSize: 14, fontWeight: 600 }}>
-            Goal
+          <label style={{ fontSize: 14, fontWeight: 700 }}>
+            Task
             <FancySelect
               value={selectedGoal}
               onChange={(val) => {
                 setSelectedGoal(val);
                 setRunQuery(val);
               }}
-              placeholder={selectedProject ? "Select a goal" : "Select project first"}
-              options={goals.map(g => ({ value: g.id, label: g.goal || `Goal ${g.id.slice(0, 8)}` }))}
+              placeholder={selectedProject ? "Select a task" : "Select project first"}
+              options={goals.map(g => ({
+                value: g.id,
+                label: (
+                  <div style={{ display:'flex', flexDirection:'column' }}>
+                    <span style={{ fontWeight:600, color:'#0F172A' }}>{g.task_name || (g.goal || `Goal ${g.id.slice(0,8)}`)}</span>
+                    {g.task_id != null && (
+                      <span style={{ fontSize:11, color:'#94A3B8', fontWeight: 500 }}>ID: task-{g.task_id}</span>
+                    )}
+                  </div>
+                ) as any
+              }))}
               searchable={true}
+              compact
             />
           </label>
         </div>

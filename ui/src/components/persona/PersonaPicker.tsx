@@ -25,17 +25,22 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
           headers['Authorization'] = `Bearer ${token}`;
         }
 
-        console.log('[PersonaPicker] Fetching user personas with token:', token ? 'present' : 'missing');
-        const r = await fetch('/api/user_personas', {
+        console.log('[PersonaPicker] Fetching personas with token:', token ? 'present' : 'missing');
+        const r = await fetch('/api/personas', {
           cache: 'no-store',
           headers
         });
         console.log('[PersonaPicker] Response status:', r.status);
         const data = await r.json();
         console.log('[PersonaPicker] Response data:', data);
-        const list: any[] = Array.isArray(data?.personas) ? data.personas : [];
+        // Accept array or { personas } or { items }
+        const list: any[] = Array.isArray(data)
+          ? data
+          : (Array.isArray((data as any)?.personas)
+            ? (data as any).personas
+            : (Array.isArray((data as any)?.items) ? (data as any).items : []));
         if (!mounted) return;
-        const mapped: Persona[] = list.map((p: any) => ({ id: String(p.id ?? p.persona_id ?? ''), name: String(p.name ?? p.persona_name ?? `Persona ${p.id ?? ''}`), bio: p.bio }));
+        const mapped: Persona[] = list.map((p: any) => ({ id: String(p.id ?? p.persona_id ?? ''), name: String(p.name ?? p.persona_name ?? `Persona ${p.id ?? ''}`), bio: (p.bio || p.traits || '') }));
         console.log('[PersonaPicker] Mapped personas:', mapped);
         setPersonas(mapped);
 
@@ -264,9 +269,14 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
                           <span className="text-slate-900 font-medium truncate">{persona.name}</span>
                         </label>
                       </div>
-                      <div className="meta mt-1 truncate" title={persona.bio || ''}>
-                        {persona.bio || 'No description available'}
-                      </div>
+                      {(() => {
+                        const desc = String(persona.bio || '').trim();
+                        return (
+                          <div className="meta mt-1 truncate" title={desc}>
+                            {desc || ''}
+                          </div>
+                        );
+                      })()}
                       <div className="text-xs text-slate-500 mt-1">Default users: 3</div>
                     </div>
                     <div className="shrink-0 flex items-center gap-2">

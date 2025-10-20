@@ -10,9 +10,10 @@ type FancySelectProps = {
   onChange: (value: string) => void;
   disabled?: boolean;
   searchable?: boolean;
+  compact?: boolean; // visually denser trigger/menu for tight filter bars
 };
 
-export default function FancySelect({ options, value, placeholder = 'Select…', onChange, disabled, searchable = true }: FancySelectProps) {
+export default function FancySelect({ options, value, placeholder = 'Select…', onChange, disabled, searchable = true, compact = false }: FancySelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -48,8 +49,13 @@ export default function FancySelect({ options, value, placeholder = 'Select…',
         style={{
           width: '100%', textAlign: 'left',
           background: '#FFFFFF', border: '1px solid var(--border)',
-          borderRadius: 12, padding: '18px 20px', color: 'var(--text)',
-          fontWeight: 700, fontSize: '15px', minHeight: '56px'
+          borderRadius: compact ? 10 : 12,
+          padding: compact ? '12px 36px 12px 12px' : '18px 20px',
+          color: 'var(--text)',
+          fontWeight: 700,
+          fontSize: compact ? '14px' : '15px',
+          minHeight: compact ? '44px' : '56px',
+          boxShadow: compact ? '0 1px 2px rgba(15,23,42,0.06)' : undefined
         }}
       >
         <span className={`select-value${activeLabel ? '' : ' placeholder'}`} style={{ color: activeLabel ? 'var(--text)' : 'var(--muted)' }}>
@@ -64,19 +70,19 @@ export default function FancySelect({ options, value, placeholder = 'Select…',
           style={{ position: 'absolute', left: 0, right: 0, zIndex: 50, marginTop: 8, background: '#FFFFFF', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 12px 36px rgba(15,23,42,0.12)' }}
         >
           {searchable && (
-            <div className="select-search" style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>
+            <div className="select-search" style={{ padding: compact ? 6 : 8, borderBottom: '1px solid var(--border)' }}>
               <input
                 autoFocus
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search…"
-                style={{ width: '100%', background: '#FFFFFF', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', color: 'var(--text)' }}
+                style={{ width: '100%', background: '#FFFFFF', border: '1px solid var(--border)', borderRadius: 8, padding: compact ? '6px 8px' : '8px 10px', color: 'var(--text)', fontSize: compact ? '13px' : '14px' }}
               />
             </div>
           )}
           <div className="select-options" style={{ maxHeight: 260, overflow: 'auto' }}>
             {filtered.length === 0 && (
-              <div className="select-empty" style={{ padding: '10px 12px', color: 'var(--muted)' }}>No matches</div>
+              <div className="select-empty" style={{ padding: compact ? '8px 10px' : '10px 12px', color: 'var(--muted)' }}>No matches</div>
             )}
             {filtered.map(o => (
               <div
@@ -89,7 +95,7 @@ export default function FancySelect({ options, value, placeholder = 'Select…',
                 aria-selected={o.value === value}
                 title={o.label}
                 tabIndex={0}
-                style={{ padding: '10px 14px', cursor: 'pointer', background: o.value === value ? 'var(--accent)' : '#FFFFFF', color: o.value === value ? 'var(--accent-text)' : 'var(--text)' }}
+                style={{ padding: compact ? '8px 12px' : '10px 14px', cursor: 'pointer', background: o.value === value ? 'var(--accent)' : '#FFFFFF', color: o.value === value ? 'var(--accent-text)' : 'var(--text)', fontSize: compact ? '13px' : undefined }}
                 onMouseEnter={(e) => { (e.currentTarget.style as any).background = 'rgba(15,23,42,0.04)'; }}
                 onMouseLeave={(e) => { (e.currentTarget.style as any).background = o.value === value ? 'var(--accent)' : '#FFFFFF'; }}
               >

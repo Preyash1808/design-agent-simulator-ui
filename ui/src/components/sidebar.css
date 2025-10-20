@@ -107,3 +107,7 @@
   /* Keyboard focus ring */
   .rail-item:focus-visible { outline: none; box-shadow: 0 0 0 2px #94A3B8; }
   
+  /* Footer spacing (reverted to prior minimal tweaks) */
+  .rail-footer { }
+  .sidebar[data-collapsed="true"] .rail-footer { }
+  .rail-hr { }
