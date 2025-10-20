@@ -143,6 +143,10 @@ export default function CreateRunUnifiedPage() {
           setActiveRunId(ridLatest);
           setActiveRunStatus('INPROGRESS');
           if (latest.log_path) setActiveRunLog(String(latest.log_path));
+          // Restore task name from backend data if available
+          if (latest.task_name) {
+            setActiveTaskName(String(latest.task_name));
+          }
           const started = new Date(latest.created_at || latest.started_at || latest.updated_at || Date.now()).getTime();
           runStartRef.current = started;
           setRunStartMs(started);
@@ -158,6 +162,10 @@ export default function CreateRunUnifiedPage() {
             setActiveRunId(rid);
             setActiveRunStatus('COMPLETED');
             if (completed.log_path) setActiveRunLog(String(completed.log_path));
+            // Restore task name from backend data if available
+            if (completed.task_name) {
+              setActiveTaskName(String(completed.task_name));
+            }
           }
           setStep('done');
         }
@@ -488,6 +496,10 @@ export default function CreateRunUnifiedPage() {
           console.log('[STATUS DEBUG] Found run item, status:', status, 'runItem:', runItem);
           setActiveRunStatus(status);
           setActiveRunLog(runItem.log_path || null);
+          // Restore task name from backend data if available
+          if (runItem.task_name && !activeTaskName) {
+            setActiveTaskName(String(runItem.task_name));
+          }
           // set start time once
           const startedAt = new Date(runItem.created_at || runItem.started_at || runItem.updated_at || Date.now()).getTime();
           if (!runStartRef.current || runStartRef.current !== startedAt) {
