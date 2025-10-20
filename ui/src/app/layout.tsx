@@ -8,6 +8,13 @@ import AuthRedirect from '../components/AuthRedirect';
 export const metadata = {
   title: 'Sparrow',
   description: 'Sparrow – preprocess and persona test UI',
+  icons: {
+    icon: [
+      { url: '/icon', type: 'image/png' },
+      { url: '/favicon.ico' },
+    ],
+    apple: [{ url: '/apple-icon', type: 'image/png' }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
