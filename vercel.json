@@ -1,9 +1,11 @@
 {
   "version": 2,
-  "framework": "nextjs",
-  "installCommand": "cd ui && npm install",
-  "buildCommand": "cd ui && npm run build",
-  "devCommand": "cd ui && npm run dev"
+  "builds": [
+    {
+      "src": "ui/package.json",
+      "use": "@vercel/next"
+    }
+  ]
 }
 
 
