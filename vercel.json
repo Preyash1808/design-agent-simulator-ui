@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "installCommand": "cd ui && npm ci",
+  "buildCommand": "cd ui && npm run build",
+  "devCommand": "cd ui && npm run dev",
+  "outputDirectory": "ui/.next",
+  "functions": {
+    "api/**": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}
+
+
