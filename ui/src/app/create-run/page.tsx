@@ -5,7 +5,16 @@ import { useRouter } from 'next/navigation';
 
 type Project = { id: string; name: string; status: string; created_at?: string; updated_at?: string };
 type Persona = { id: string; name: string; bio?: string };
-type Run = { id: string; project_id: string; goal?: string; status: string; created_at?: string };
+type Run = {
+  id: string;
+  project_id: string;
+  goal?: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+  name?: string;
+  project_name?: string;
+};
 
 export default function LaunchTestPage() {
   const router = useRouter();
