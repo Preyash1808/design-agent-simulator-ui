@@ -1,9 +1,9 @@
 {
   "version": 2,
   "framework": "nextjs",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev"
+  "installCommand": "cd ui && npm install",
+  "buildCommand": "cd ui && npm run build",
+  "devCommand": "cd ui && npm run dev"
 }
 
 
