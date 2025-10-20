@@ -1,4 +1,5 @@
-import { NextRequest } from 'next/server';
+// Use standard Request type for route handlers to satisfy Next.js types
+import type { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 

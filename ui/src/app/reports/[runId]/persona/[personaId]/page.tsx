@@ -1,12 +1,15 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
 const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 
-export default function PersonaFullPage({ params }: { params: { runId: string; personaId: string } }) {
-  const { runId, personaId } = params;
+export default function PersonaFullPage() {
+  const p = useParams() as { runId: string; personaId: string };
+  const runId = String(p?.runId || '');
+  const personaId = String(p?.personaId || '');
   const [data, setData] = useState<any | null>(null);
   const [personasMeta, setPersonasMeta] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

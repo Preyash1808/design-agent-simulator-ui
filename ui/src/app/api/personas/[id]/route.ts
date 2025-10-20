@@ -1,4 +1,5 @@
-import { NextRequest } from 'next/server';
+// Route handler types compatible with Next 15 (params as Promise)
+import type { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
@@ -35,9 +36,9 @@ function getUserId(req: NextRequest): string | null {
   return null;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || 'http://localhost:8000';
-  const id = params.id;
+  const { id } = await context.params;
   try {
     const r = await fetch(`${api}/personas/${encodeURIComponent(id)}`, { cache: 'no-store' });
     const ct = r.headers.get('content-type') || 'application/json; charset=utf-8';
@@ -49,10 +50,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || 'http://localhost:8000';
   const auth = req.headers.get('authorization') || '';
-  const id = params.id;
+  const { id } = await context.params;
   const body = await req.text();
   try {
     const r = await fetch(`${api}/personas/${encodeURIComponent(id)}`, {
@@ -79,16 +80,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || 'http://localhost:8000';
-  const id = params.id;
+  const { id } = await context.params;
   try {
     const auth = req.headers.get('authorization') || '';
     const r = await fetch(`${api}/personas/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { ...(auth ? { Authorization: auth } : {}) } });
     return new Response(null, { status: r.status });
   } catch (err: any) {
     // Fallback local delete
-    const uid = getUserId(req as any);
+    const uid = getUserId(req);
     if (!uid) return new Response('unauthorized', { status: 401 });
     const p = getUserPersonaPath(uid);
     let arr: any[] = []; try { if (fs.existsSync(p)) arr = JSON.parse(fs.readFileSync(p, 'utf-8')) || []; } catch {}
