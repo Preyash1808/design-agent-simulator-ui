@@ -15,6 +15,7 @@ import string
 import subprocess
 import io
 import csv
+import zipfile
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Header, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import FileResponse, Response
@@ -2310,3 +2311,62 @@ async def start_tests_by_images(
         'log': f"/runs-files/{run_dir.name}/api_tests.log",
         'db': {'run_id': db_run_id}
     }
+
+
+@router.get('/runs/{run_id}/logs.zip')
+async def download_test_logs(
+    run_id: str,
+    project_id: Optional[str] = None,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Download test run logs as a zip file.
+    Creates a zip of the entire test_run_<timestamp> folder.
+    """
+    try:
+        # Verify authentication if using Supabase
+        if use_supabase_db() and authorization:
+            from ..auth_utils import get_current_user
+            try:
+                token = authorization.replace('Bearer ', '') if authorization else None
+                if token:
+                    await get_current_user(token)
+            except Exception as e:
+                raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+
+        # Find the run directory
+        run_dir = RUNS / run_id
+        if not run_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Run directory not found: {run_id}")
+
+        # Create zip file in memory
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for file_path in run_dir.rglob('*'):
+                if file_path.is_file():
+                    try:
+                        # Get relative path from run_dir
+                        arc_name = file_path.relative_to(run_dir).as_posix()
+                        zf.write(file_path, arc_name)
+                    except Exception as e:
+                        print(f"Error adding {file_path} to zip: {e}")
+                        continue
+
+        # Prepare response
+        buf.seek(0)
+        zip_data = buf.getvalue()
+        
+        return Response(
+            content=zip_data,
+            media_type='application/zip',
+            headers={
+                'Content-Disposition': f'attachment; filename="{run_id}_logs.zip"'
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating logs zip: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to create logs zip: {str(e)}")

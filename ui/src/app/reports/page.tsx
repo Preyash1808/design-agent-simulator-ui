@@ -46,7 +46,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
   );
 }
 
-type Project = { id: string, name: string };
+type Project = { id: string, name: string, run_dir?: string };
 type Run = { id: string, project_id: string, started_at?: string };
 type RunMetrics = {
   run_metrics?: any;
@@ -124,13 +124,15 @@ export default function ReportsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState("");
   const [runQuery, setRunQuery] = useState("");
+  // Map DB project id -> filesystem project id (slug like restructured_hyou_...)
+  const [projectSlugById, setProjectSlugById] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(false);
   const [bootLoading, setBootLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RunMetrics | null>(null);
   const [lastRequested, setLastRequested] = useState<string>("");
-  const [goals, setGoals] = useState<Array<{ id: string; goal: string }>>([]);
+  const [goals, setGoals] = useState<Array<{ id: string; goal: string; run_dir?: string }>>([]);
   const [selectedGoal, setSelectedGoal] = useState("");
   const [tab, setTab] = useState<'overview'|'persona'>('overview');
   const [fbFilter, setFbFilter] = useState<string>("");
@@ -143,8 +145,8 @@ export default function ReportsPage() {
   const [sevVisible, setSevVisible] = useState<Record<string, boolean>>({ S1: true, S2: true, S3: true, S4: true, S5: true });
   // Global Download modal
   const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [dlKind, setDlKind] = useState<'overview'|'persona'|'full'|'excel'>('overview');
-  const [dlTab, setDlTab] = useState<'report'|'excel'>('report');
+  const [dlKind, setDlKind] = useState<'overview'|'persona'|'full'|'excel'|'logs'>('overview');
+  const [dlTab, setDlTab] = useState<'report'|'excel'|'logs'>('report');
   // Persona density toggle
   const [personaDensity, setPersonaDensity] = useState<'comfortable'|'compact'>('comfortable');
   const recommendedKind = useMemo(() => (tab === 'persona' ? 'persona' : 'overview'), [tab]);
@@ -213,7 +215,7 @@ export default function ReportsPage() {
     } catch {}
   }
 
-  async function handleDownload(kind: 'overview'|'persona'|'full'|'excel') {
+  async function handleDownload(kind: 'overview'|'persona'|'full'|'excel'|'logs') {
       const runId = String(runQuery || lastRequested || '').trim();
       if (!runId) return;
     if (kind === 'excel') {
@@ -232,6 +234,44 @@ export default function ReportsPage() {
         a.remove();
         URL.revokeObjectURL(url);
       } catch (e) {
+      }
+      return;
+    }
+    if (kind === 'logs') {
+      try {
+        setDownloading(true);
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        // Find the run_dir for this runId from goals
+        const selectedGoalData = goals.find(g => g.id === runId);
+        const runDirForLogs = selectedGoalData?.run_dir;
+        
+        // Extract just the directory name if run_dir is a full path
+        let logRunId = runId;
+        if (runDirForLogs) {
+          // If run_dir is like "/path/to/test_run_20251020_084434_9ibj", extract just "test_run_20251020_084434_9ibj"
+          const parts = runDirForLogs.split('/');
+          logRunId = parts[parts.length - 1] || runId;
+        }
+        
+        // Use filesystem slug when available
+        const projectFsId = projectSlugById[selectedProject] || selectedProject;
+        const qs = new URLSearchParams({ project_id: projectFsId, run_id: logRunId });
+        const url = `/api/test_logs?${qs.toString()}`;
+        const r = await fetch(url, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+        if (!r.ok) throw new Error(`Failed: ${r.status}`);
+        const blob = await r.blob();
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = `${logRunId}_logs.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(href);
+      } catch (e) {
+        console.error('Failed to download logs:', e);
+      } finally { 
+        setDownloading(false); 
       }
       return;
     }
@@ -1187,16 +1227,32 @@ export default function ReportsPage() {
           String(item.type).toLowerCase() === 'run' &&
           String(item.project_id) === selectedProject
         );
-        // Create unique goals array with run IDs
+        // Create unique goals array with run IDs and run_dir
         const goalsMap = new Map();
         projectRuns.forEach((run: any) => {
           const runId = String(run.id || run.run_id || '');
           const goalText = String(run.goal || '');
+          const runDir = run.run_dir ? String(run.run_dir) : undefined;
           if (runId && !goalsMap.has(runId)) {
-            goalsMap.set(runId, { id: runId, goal: goalText });
+            goalsMap.set(runId, { id: runId, goal: goalText, run_dir: runDir });
           }
         });
         setGoals(Array.from(goalsMap.values()));
+
+        // Build map DB project id -> filesystem slug using project items
+        const slugMap: Record<string, string> = {};
+        for (const it of (data.items || [])) {
+          try {
+            if (String(it.type).toLowerCase() !== 'project') continue;
+            const dbId = String(it.project_id || it.id || '');
+            const rd = String(it.run_dir || '');
+            if (!dbId || !rd) continue;
+            const parts = rd.split('/');
+            const slug = parts[parts.length - 1] || rd;
+            if (slug) slugMap[dbId] = slug;
+          } catch {}
+        }
+        if (Object.keys(slugMap).length) setProjectSlugById(slugMap);
       } catch (err) {
         console.error('Failed to load goals:', err);
         setGoals([]);
@@ -1253,10 +1309,11 @@ export default function ReportsPage() {
             <div style={{ height: 8 }} />
 
             {/* Segmented primary selector - available on both Overview and Persona tabs */}
-              <div role="tablist" aria-label="Download type" style={{ position:'relative', display:'inline-grid', gridTemplateColumns:'1fr 1fr', border:'1px solid var(--border)', borderRadius:999, overflow:'hidden', marginBottom:12 }}>
-                <span aria-hidden style={{ position:'absolute', top:2, bottom:2, left: dlTab==='report' ? 2 : '50%', width:'calc(50% - 4px)', background:'linear-gradient(180deg, rgba(147,197,253,0.25), rgba(147,197,253,0.12))', borderRadius:999, transition:'left .22s ease, background .22s ease' }} />
-                <button role="tab" aria-selected={dlTab==='report'} onClick={()=>{ setDlTab('report'); if (dlKind==='excel') setDlKind(recommendedKind); }} style={{ padding:'6px 16px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1 }}>Report</button>
+              <div role="tablist" aria-label="Download type" style={{ position:'relative', display:'inline-grid', gridTemplateColumns:'1fr 1fr 1fr', border:'1px solid var(--border)', borderRadius:999, overflow:'hidden', marginBottom:12 }}>
+                <span aria-hidden style={{ position:'absolute', top:2, bottom:2, left: dlTab==='report' ? 2 : (dlTab==='excel' ? 'calc(33.33% + 1px)' : 'calc(66.66% + 1px)'), width:'calc(33.33% - 4px)', background:'linear-gradient(180deg, rgba(147,197,253,0.25), rgba(147,197,253,0.12))', borderRadius:999, transition:'left .22s ease, background .22s ease' }} />
+                <button role="tab" aria-selected={dlTab==='report'} onClick={()=>{ setDlTab('report'); if (dlKind==='excel' || dlKind==='logs') setDlKind(recommendedKind); }} style={{ padding:'6px 16px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1 }}>Report</button>
                 <button role="tab" aria-selected={dlTab==='excel'} onClick={()=>{ setDlTab('excel'); setDlKind('excel'); }} style={{ padding:'6px 16px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1 }}>Personas</button>
+                <button role="tab" aria-selected={dlTab==='logs'} onClick={()=>{ setDlTab('logs'); setDlKind('logs'); }} style={{ padding:'6px 16px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1 }}>Logs</button>
             </div>
 
             {dlTab==='excel' ? (
@@ -1264,6 +1321,13 @@ export default function ReportsPage() {
                 <label style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)' }}>
                   <input type="radio" name="dlKind" checked={true} readOnly />
                   <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}><IconLayers width={14} height={14} /> Includes all personas + user‑level data for analysis.</span>
+              </label>
+            </div>
+            ) : dlTab==='logs' ? (
+              <div className="grid" style={{ gap:6, transition:'opacity .2s ease, transform .2s ease', opacity: dlAnim ? 1 : 0, transform: dlAnim ? 'translateY(0)' : 'translateY(6px)' }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)' }}>
+                  <input type="radio" name="dlKind" checked={true} readOnly />
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}><IconDownload width={14} height={14} /> Downloads complete test run logs as a zip file.</span>
               </label>
             </div>
             ) : (
