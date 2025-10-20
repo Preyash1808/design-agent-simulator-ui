@@ -1,6 +1,8 @@
 {
   "version": 2,
-  "rootDirectory": "ui"
+  "buildCommand": "cd ui && npm run build",
+  "outputDirectory": "ui/.next",
+  "installCommand": "cd ui && npm install"
 }
 
 
