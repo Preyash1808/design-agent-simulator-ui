@@ -56,6 +56,31 @@ function hslToHex(h: number, s: number, l: number): string {
   };
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
+// Generate N distinct, perceptually separated colors around the hue wheel
+function distinctColor(index: number, total: number, saturation = 55, lightness = 50): string {
+  if (total <= 0) total = 1;
+  // Golden angle approach to avoid clustering (approx 137.5 degrees)
+  const goldenAngle = 137.50776405;
+  const hue = (index * goldenAngle) % 360;
+  return hslToHex(hue, saturation, lightness);
+}
+// Curated, accessible user palette (blue, green, orange first, then diverse hues)
+const USER_COLORS = [
+  '#3B82F6', // blue
+  '#22C55E', // green
+  '#F59E0B', // amber
+  '#A855F7', // violet
+  '#06B6D4', // cyan
+  '#EF4444', // red
+  '#0EA5E9', // sky
+  '#84CC16', // lime
+  '#F472B6', // pink
+  '#7C3AED', // indigo
+];
+function getUserColor(index: number, total: number): string {
+  if (index < USER_COLORS.length) return USER_COLORS[index];
+  return distinctColor(index, total);
+}
 import FancySelect from '../../components/FancySelect';
 import Link from 'next/link';
 import { IconQuestionCircle, IconActivity, IconDownload, IconLayers, IconX } from '../../components/icons';
@@ -1930,7 +1955,81 @@ export default function ReportsPage() {
                     </button>
                   ))}
           </div>
-                <ReactECharts onChartReady={(i:any)=>setChartRef(severityRef, { getEchartsInstance: ()=>i })} style={{ height: 360 }} option={auditSeverityOption} />
+                <ReactECharts key={aggregateEmotions ? 'emo-agg' : 'emo-users'} notMerge style={{ height: 360 }} option={(function(){
+                  const themes = (metrics?.llm_run_insights?.themes || []) as Array<{ label: string, frequency: number, severity_1_5: number }>;
+                  if (!themes.length && !auditIssues.length) return null as any;
+                  const sev: Record<string, { s1: number, s2: number, s3: number, s4: number, s5: number }> = {};
+                  if (themes.length) {
+                    for (const t of themes) {
+                      const l = String(t.label);
+                      if (!sev[l]) sev[l] = { s1:0,s2:0,s3:0,s4:0,s5:0 };
+                      const bucket = Math.max(1, Math.min(5, Math.round(Number(t.severity_1_5||3))));
+                      const key = ('s'+bucket) as keyof typeof sev[string];
+                      sev[l][key] += Number(t.frequency||0);
+                    }
+                  }
+                  for (const i of auditIssues) {
+                    if (!sev[i.label]) sev[i.label] = { s1:0,s2:0,s3:i.count||0,s4:0,s5:0 };
+                  }
+                  const labels = Object.keys(sev);
+                  const order = labels.slice().sort((a,b)=>{
+                    const sa = Object.values(sev[a]).reduce((s,n)=>s+Number(n),0);
+                    const sb = Object.values(sev[b]).reduce((s,n)=>s+Number(n),0);
+                    return sb-sa;
+                  });
+                  const toPos = (x:number)=>x; const toNeg=(x:number)=>-x;
+                  const s1 = order.map(l=>toNeg(sev[l].s1));
+                  const s2 = order.map(l=>toNeg(sev[l].s2));
+                  const s3 = order.map(l=>toNeg(sev[l].s3));
+                  const s4 = order.map(l=>toPos(sev[l].s4));
+                  const s5 = order.map(l=>toPos(sev[l].s5));
+                  const prettyTitle = (s: string) => {
+                    const keepUpper = new Set(['CTA','AI','UI','UX']);
+                    const lowerWords = new Set(['of','in','to','and','the','a','an','for','on','by','at']);
+                    return String(s)
+                      .split(/\s+/)
+                      .map((w, idx, arr) => {
+                        const clean = w.replace(/[^a-zA-Z\-]/g,'');
+                        const upper = clean.toUpperCase();
+                        if (keepUpper.has(upper)) return upper;
+                        const lower = clean.toLowerCase();
+                        if (idx!==0 && idx!==arr.length-1 && lowerWords.has(lower)) return lower;
+                        // handle hyphenated words
+                        return lower.split('-').map(p=>p.charAt(0).toUpperCase()+p.slice(1)).join('-');
+                      })
+                      .join(' ');
+                  };
+                  // Compute dynamic left padding and wrapping to avoid truncation
+                  const maxLabelLen = order.reduce((m, l) => Math.max(m, prettyTitle(l).length), 0);
+                  const gridLeft = Math.min(320, Math.max(160, Math.round(maxLabelLen * 7)));
+                  const wrap = (s: string) => {
+                    const words = String(s).replace(/\//g, ' / ').split(/\s+/);
+                    const lines: string[] = [];
+                    let line = '';
+                    for (const w of words) {
+                      const next = (line + ' ' + w).trim();
+                      if (next.length > 24) { lines.push(line.trim()); line = w; }
+                      else { line = next; }
+                    }
+                    if (line.trim()) lines.push(line.trim());
+                    return lines.slice(0, 3).join('\n');
+                  };
+                  return {
+                    backgroundColor: 'transparent',
+                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                    grid: { left: gridLeft, right: 30, top: 16, bottom: 30 },
+                    xAxis: { type: 'value', axisLabel: { color: '#cbd5e1', formatter: (v:number)=>Math.abs(v) } },
+                    yAxis: { type: 'category', data: order.map(prettyTitle), axisLabel: { color: '#cbd5e1', interval: 0, width: gridLeft - 40 as any, overflow: 'break' as any, lineHeight: 18 as any, margin: 12 as any, formatter: wrap } },
+                    legend: { show: false, data: ['S1','S2','S3','S4','S5'], textStyle: { color: '#cbd5e1' } },
+                    series: [
+                      { type:'bar', name:'S1', stack:'sev', data: s1, itemStyle:{ color:'#9CA3AF' } },
+                      { type:'bar', name:'S2', stack:'sev', data: s2, itemStyle:{ color:'#818CF8' } },
+                      { type:'bar', name:'S3', stack:'sev', data: s3, itemStyle:{ color:'#60A5FA' } },
+                      { type:'bar', name:'S4', stack:'sev', data: s4, itemStyle:{ color:'#34D399' } },
+                      { type:'bar', name:'S5', stack:'sev', data: s5, itemStyle:{ color:'#F59E0B' } },
+                    ]
+                  } as any;
+                })()} />
               </>
               )}
               {auditRows.length > 0 && (
@@ -2457,7 +2556,7 @@ export default function ReportsPage() {
                               <span>{aggregateEmotions ? 'ON' : 'OFF'}</span>
                             </label>
                           </div>
-                          <ReactECharts style={{ height: 360 }} option={(function(){
+                          <ReactECharts key={aggregateEmotions ? 'emo-agg' : 'emo-users'} notMerge style={{ height: 360 }} option={(function(){
                             // Sort emotions from negative (bottom) to positive (top)
                             // 10 product-appropriate buckets equally spanning negative→positive
                             const CANON = ['frustrated','annoyed','confused','anxious','overwhelmed','neutral','focused','satisfied','confident','delighted'];
@@ -2524,7 +2623,8 @@ export default function ReportsPage() {
                                 showSymbol: true,
                                 symbol: 'circle',
                                 symbolSize: 5,
-                                lineStyle: { width: 2 },
+                                lineStyle: { width: 2, color: getUserColor(idx, Math.max(1, personaEmoSeries.length)) },
+                                itemStyle: { color: getUserColor(idx, Math.max(1, personaEmoSeries.length)) },
                                 data: (s.points ?? []).map(p=>{ const observed = String(p?.state || ''); const bucket = bucketFor(observed); const yi = Number(indexMap.get(bucket) ?? -1); const stepVal = Number(p?.step ?? 0); const sentVal = Number(p?.sentiment ?? 0); const screenVal = String(p?.screen ?? ''); return [stepVal, yi, sentVal, screenVal, observed]; }).filter((d:any)=> Number(d[1]) >= 0),
                               }));
                             } else {
@@ -2561,7 +2661,23 @@ export default function ReportsPage() {
                                 const yi = Number(indexMap.get(best) ?? -1);
                                 avg.push([t, yi, mean, '', best]);
                               }
-                              series = [{ name: (personaCards.find(p=>p.persona_id===openPersonaId)?.persona_name || 'Persona'), type:'line', smooth:0.25, showSymbol:true, symbol:'circle', symbolSize:6, lineStyle:{ width:3 }, data: avg }];
+                              // Persona line (prominent)
+                              const personaName = (personaCards.find(p=>p.persona_id===openPersonaId)?.persona_name || 'Persona');
+                              const personaSeries = { name: personaName, type:'line', smooth:0.25, showSymbol:true, symbol:'circle', symbolSize:6, lineStyle:{ width:3, color:'#1f2937' }, itemStyle:{ color:'#1f2937' }, data: avg };
+                              // Users in background (retain their colors but low opacity)
+                              const userSeries = personaEmoSeries.map((s, idx) => ({
+                                name: s.name,
+                                type: 'line',
+                                smooth: 0.25,
+                                showSymbol: false,
+                                symbol: 'none',
+                                lineStyle: { width: 1, color: getUserColor(idx, Math.max(1, personaEmoSeries.length)), opacity: 0.35 },
+                                itemStyle: { color: getUserColor(idx, Math.max(1, personaEmoSeries.length)), opacity: 0.35 },
+                                emphasis: { focus: 'series' },
+                                data: (s.points ?? []).map(p=>{ const observed = String(p?.state || ''); const bucket = bucketFor(observed); const yi = Number(indexMap.get(bucket) ?? -1); const stepVal = Number(p?.step ?? 0); const sentVal = Number(p?.sentiment ?? 0); const screenVal = String(p?.screen ?? ''); return [stepVal, yi, sentVal, screenVal, observed]; }).filter((d:any)=> Number(d[1]) >= 0),
+                              }));
+                              // Legend: persona first, then users
+                              series = [personaSeries, ...userSeries];
                             }
                             if (!series.length) return { graphic: [{ type:'text', left:'center', top:'middle', style:{ text:'No emotion timeline available', fill:'#94a3b8', fontSize: 14 } }] } as any;
                             return {
@@ -2569,7 +2685,7 @@ export default function ReportsPage() {
                               grid: { left: 70, right: 20, top: 28, bottom: 40, containLabel: true },
                               xAxis: { type: 'value', min: 1, max: maxStep, axisLabel: { color: '#cbd5e1' }, name: 'Step', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8' } },
                               yAxis: { type: 'category', data: paddedStates, axisLabel: { color: '#1e293b', fontWeight: 600, lineHeight: 20, margin: 12 }, name: 'Emotional State', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#94a3b8', padding: [0, 0, 6, 0], fontSize: 12, align: 'left' } },
-                              legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' } },
+                              legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' }, selector: false },
                               dataZoom: [ { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: 'shift', moveOnMouseMove: 'shift', moveOnMouseWheel: false, preventDefaultMouseMove: false }, { type: 'slider', xAxisIndex: 0, start: 0, end: 30, height: 16, bottom: 6 } ],
                               tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const yi=p?.data?.[1]; const sent=p?.data?.[2]; const screen=p?.data?.[3]||''; const observedRaw=p?.data?.[4]||''; const plottedRaw=states[yi]||''; const cap=(s:string)=> s ? (s.charAt(0).toUpperCase()+s.slice(1)) : s; const observed=cap(String(observedRaw)); const plotted=cap(String(plottedRaw)); const sentimentTxt=(typeof sent==='number'?(sent>=0?`+${sent.toFixed(2)}`:sent.toFixed(2)):'-'); return `${p.seriesName} · Step ${step}${screen?` · ${screen}`:''}<br/>Observed: ${observed} (sentiment ${sentimentTxt})<br/>Plotted as: ${plotted}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
                               series,
