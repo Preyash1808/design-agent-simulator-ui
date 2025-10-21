@@ -154,6 +154,7 @@ export default function ReportsPage() {
   const [personaDetailLoading, setPersonaDetailLoading] = useState(false);
   const [personaEmoSeries, setPersonaEmoSeries] = useState<Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number; screen?: string }> }>>([]);
   const [personaEmoStates, setPersonaEmoStates] = useState<string[]>([]);
+  const [aggregateEmotions, setAggregateEmotions] = useState(false);
   const [selectedBacktrack, setSelectedBacktrack] = useState<{ name: string; count: number } | null>(null);
   // Flow insights shared state
   const [flowRuns, setFlowRuns] = useState<string[]>([]);
@@ -2447,7 +2448,15 @@ export default function ReportsPage() {
 
                         {/* Sentiment drift from emotions API (x: step, y: emotional state) */}
                         <div id="sentiment-drift" className="tile" style={{ marginTop: 12 }}>
-                          <h4>Sentiment Drift</h4>
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <h4 style={{ margin: 0 }}>Sentiment Drift</h4>
+                            <label style={{ display:'inline-flex', alignItems:'center', gap: 8, fontSize: 14, color:'#0f172a' }}>
+                              <div onClick={()=>setAggregateEmotions(v=>!v)} style={{ position:'relative', width: 48, height: 26, borderRadius: 999, cursor:'pointer', background: aggregateEmotions ? '#111827' : '#e5e7eb', border: '1px solid #cbd5e1' }}>
+                                <div style={{ position:'absolute', top: 2, left: aggregateEmotions ? 24 : 2, width: 22, height: 22, borderRadius: 999, background: aggregateEmotions ? '#4f46e5' : '#6366f1', transition: 'left .15s ease' }} />
+                              </div>
+                              <span>{aggregateEmotions ? 'ON' : 'OFF'}</span>
+                            </label>
+                          </div>
                           <ReactECharts style={{ height: 360 }} option={(function(){
                             // Sort emotions from negative (bottom) to positive (top)
                             // 10 product-appropriate buckets equally spanning negative→positive
@@ -2506,16 +2515,54 @@ export default function ReportsPage() {
                             // Add an extra line break and capitalize first letter for display
                             const paddedStates = states.map(s => `${(s.charAt(0).toUpperCase() + s.slice(1))}\n`);
                             const maxStep = Math.max(10, ...personaEmoSeries.flatMap(s=>s.points.map(p=>p.step)));
-                            const series = personaEmoSeries.map((s, idx) => ({
-                              name: s.name,
+                            let series;
+                            if (!aggregateEmotions) {
+                              series = personaEmoSeries.map((s, idx) => ({
+                                name: s.name,
                                 type: 'line', 
-                              smooth: 0.25,
-                              showSymbol: true,
+                                smooth: 0.25,
+                                showSymbol: true,
                                 symbol: 'circle',
-                              symbolSize: 5,
-                              lineStyle: { width: 2 },
-                              data: (s.points ?? []).map(p=>{ const observed = String(p?.state || ''); const bucket = bucketFor(observed); const yi = Number(indexMap.get(bucket) ?? -1); const stepVal = Number(p?.step ?? 0); const sentVal = Number(p?.sentiment ?? 0); const screenVal = String(p?.screen ?? ''); return [stepVal, yi, sentVal, screenVal, observed]; }).filter((d:any)=> Number(d[1]) >= 0),
-                            }));
+                                symbolSize: 5,
+                                lineStyle: { width: 2 },
+                                data: (s.points ?? []).map(p=>{ const observed = String(p?.state || ''); const bucket = bucketFor(observed); const yi = Number(indexMap.get(bucket) ?? -1); const stepVal = Number(p?.step ?? 0); const sentVal = Number(p?.sentiment ?? 0); const screenVal = String(p?.screen ?? ''); return [stepVal, yi, sentVal, screenVal, observed]; }).filter((d:any)=> Number(d[1]) >= 0),
+                              }));
+                            } else {
+                              // Aggregate: build per-step list of effective scores and compute mean, then snap to bucket
+                              const k = 2.0;
+                              const perStep: Record<number, number[]> = {};
+                              for (const s of personaEmoSeries) {
+                                for (const p of (s.points ?? [])) {
+                                  const observed = String(p?.state || '');
+                                  const bucket = bucketFor(observed);
+                                  const pol = Number(scoreMap[bucket] ?? 0);
+                                  const score = pol + k * Number(p?.sentiment ?? 0);
+                                  const t = Number(p?.step ?? 0);
+                                  if (!perStep[t]) perStep[t] = [];
+                                  perStep[t].push(score);
+                                }
+                              }
+                              const steps = Object.keys(perStep).map(n=>Number(n)).sort((a,b)=>a-b);
+                              const avg: Array<[number, number, number, string, string]> = [];
+                              // simple moving average window=3
+                              const window = 3; const half = Math.floor(window/2);
+                              for (let i=0;i<steps.length;i++){
+                                const t = steps[i];
+                                // local mean
+                                const local = perStep[t];
+                                let mean = local.reduce((s,v)=>s+v,0)/local.length;
+                                const winSteps = steps.slice(Math.max(0,i-half), Math.min(steps.length,i+half+1));
+                                const winVals: number[] = [];
+                                for (const w of winSteps) winVals.push(...perStep[w]);
+                                if (winVals.length) mean = winVals.reduce((s,v)=>s+v,0)/winVals.length;
+                                // snap to nearest bucket index
+                                let best = states[0]; let bestDiff = Math.abs((scoreMap[best]??0) - mean);
+                                for (const sName of states){ const d = Math.abs((scoreMap[sName]??0) - mean); if (d<bestDiff){ best = sName; bestDiff = d; } }
+                                const yi = Number(indexMap.get(best) ?? -1);
+                                avg.push([t, yi, mean, '', best]);
+                              }
+                              series = [{ name: (personaCards.find(p=>p.persona_id===openPersonaId)?.persona_name || 'Persona'), type:'line', smooth:0.25, showSymbol:true, symbol:'circle', symbolSize:6, lineStyle:{ width:3 }, data: avg }];
+                            }
                             if (!series.length) return { graphic: [{ type:'text', left:'center', top:'middle', style:{ text:'No emotion timeline available', fill:'#94a3b8', fontSize: 14 } }] } as any;
                             return {
                               backgroundColor: 'transparent',
