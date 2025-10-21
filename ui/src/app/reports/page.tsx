@@ -152,7 +152,7 @@ export default function ReportsPage() {
   const [personaModalTab, setPersonaModalTab] = useState<'think-aloud' | 'emotion' | 'path' | 'what-if'>('think-aloud');
   const [personaDetail, setPersonaDetail] = useState<any | null>(null);
   const [personaDetailLoading, setPersonaDetailLoading] = useState(false);
-  const [personaEmoSeries, setPersonaEmoSeries] = useState<Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number }> }>>([]);
+  const [personaEmoSeries, setPersonaEmoSeries] = useState<Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number; screen?: string }> }>>([]);
   const [personaEmoStates, setPersonaEmoStates] = useState<string[]>([]);
   const [selectedBacktrack, setSelectedBacktrack] = useState<{ name: string; count: number } | null>(null);
   // Flow insights shared state
@@ -477,19 +477,20 @@ export default function ReportsPage() {
         if (emoResp.ok) {
           const ej = await emoResp.json();
           const journeys: any[] = Array.isArray(ej?.emotion_journeys) ? ej.emotion_journeys : [];
-          const series: Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number }> }> = [];
+          const series: Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number; screen?: string }> }> = [];
           const states = new Set<string>();
           for (let ji = 0; ji < journeys.length; ji++) {
             const j = journeys[ji];
             const name = `User ${ji + 1}`;
             const ptsRaw: any[] = Array.isArray(j?.emotions) ? j.emotions : [];
-            const points: Array<{ step: number; state: string; sentiment: number }> = [];
+            const points: Array<{ step: number; state: string; sentiment: number; screen?: string }> = [];
             for (const p of ptsRaw) {
               const step = Number(p?.step ?? 0);
               const stateArr: string[] = Array.isArray(p?.emotional_state) ? p.emotional_state : [];
               const primary = String((stateArr[0] ?? p?.emotion ?? '').toString().toLowerCase());
               const sentiment = Number(p?.sentiment_value ?? 0);
-              if (step > 0 && primary) { points.push({ step, state: primary, sentiment }); states.add(primary); }
+              const screen = String(p?.screen_name || p?.screen || '');
+              if (step > 0 && primary) { points.push({ step, state: primary, sentiment, screen }); states.add(primary); }
             }
             if (points.length) series.push({ name, points });
           }
@@ -1435,6 +1436,21 @@ export default function ReportsPage() {
     } catch (e) {}
   }
 
+  function scrollToModalSection(targetId: string) {
+    try {
+      const el = typeof document !== 'undefined' ? document.getElementById(targetId) : null;
+      if (!el) return;
+      const modal = el.closest('.persona-modal') as HTMLElement | null;
+      const container = modal?.querySelector('.persona-modal-content') as HTMLElement | null;
+      if (container) {
+        const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 8;
+        container.scrollTo({ top, behavior: 'smooth' });
+      } else {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } catch {}
+  }
+
   if (bootLoading) return <div>Loading...</div>;
 
   return (
@@ -2359,7 +2375,7 @@ export default function ReportsPage() {
                         {personaModalTab === 'emotion' && (
                           <div className="persona-modal-nav-subitems">
                             <a href="#sentiment-drift" className="persona-modal-nav-subitem">Sentiment Drift</a>
-                            <a href="#emotion-mix" className="persona-modal-nav-subitem">Emotion Mix</a>
+                            <span className="persona-modal-nav-subitem muted" aria-disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>Emotion Mix</span>
                           </div>
                         )}
 
@@ -2371,9 +2387,9 @@ export default function ReportsPage() {
                         </button>
                         {personaModalTab === 'path' && (
                           <div className="persona-modal-nav-subitems">
-                            <a href="#flow-insights" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('flow-insights'); if(el){ const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior:'smooth' }); }}}>Flow Insights</a>
-                            <a href="#path-backtracks" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('path-backtracks'); if(el){ const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior:'smooth' }); }}}>Backtracks</a>
-                            <a href="#exits" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('exits'); if(el){ const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior:'smooth' }); }}}>Exits</a>
+                            <a href="#flow-insights" className="persona-modal-nav-subitem" onClick={(e)=>{ e.preventDefault(); scrollToModalSection('flow-insights'); }}>Flow Insights</a>
+                            <a href="#path-backtracks" className="persona-modal-nav-subitem" onClick={(e)=>{ e.preventDefault(); scrollToModalSection('path-backtracks'); }}>Backtracks</a>
+                            <span className="persona-modal-nav-subitem muted" aria-disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>Exits</span>
                           </div>
                         )}
 
@@ -2427,8 +2443,45 @@ export default function ReportsPage() {
                         <div id="sentiment-drift" className="tile" style={{ marginTop: 12 }}>
                           <h4>Sentiment Drift</h4>
                           <ReactECharts style={{ height: 360 }} option={(function(){
-                            const DEFAULT_STATES = ['rage','anger','frustration','sadness','disgust','fear','surprise','neutral','calm','content','joy','excitement','delight'];
-                            const states = Array.from(new Set([ ...DEFAULT_STATES, ...personaEmoStates ]));
+                            // Sort emotions from negative (bottom) to positive (top)
+                            // 10 fixed buckets equally spanning negative→positive (canonical scale)
+                            const CANON = ['rage','anger','sadness','fear','surprise','neutral','calm','content','joy','delight'];
+                            // Polarity scores (negative→positive)
+                            const scoreMap: Record<string, number> = {
+                              'rage': -5, 'anger': -4, 'frustration': -4, 'sadness': -3, 'disgust': -3,
+                              'fear': -2, 'surprise': -1, 'neutral': 0, 'calm': 1, 'content': 2,
+                              'joy': 3, 'excitement': 4, 'delight': 5,
+                              // Optional mappings for observed labels
+                              'overwhelmed': -2, 'concerned': -2, 'cautious': -1, 'anticipation': 1,
+                            };
+                            // Synonym/alias mapping from observed → canonical bucket (a few common ones)
+                            const aliasMap: Record<string, string> = {
+                              'frustration': 'anger', 'frustrated': 'anger', 'irritated': 'anger',
+                              'disappointed': 'sadness', 'melancholy': 'sadness',
+                              'terrified': 'fear', 'anxious': 'fear', 'apprehensive': 'fear',
+                              'curious': 'surprise',
+                              'optimistic': 'content', 'satisfied': 'content',
+                              'joyful': 'joy', 'happiness': 'joy',
+                              'ecstatic': 'delight', 'delighted': 'delight',
+                              'overwhelmed': 'fear', 'concerned': 'fear', 'cautious': 'fear', 'anticipation': 'content',
+                              'disgust': 'sadness', 'excitement': 'joy',
+                            };
+                            const states = CANON.slice(); // clamp to the 10 canonical buckets only
+                            const indexMap = new Map(states.map((e, i) => [e, i]));
+                            function bucketFor(label: string): string {
+                              const raw = String(label || '').toLowerCase();
+                              if (aliasMap[raw]) return aliasMap[raw];
+                              if (indexMap.has(raw)) return raw;
+                              // Fallback: choose closest by score
+                              const target = scoreMap[raw] ?? 0;
+                              let best = states[0];
+                              let bestDiff = Math.abs((scoreMap[best] ?? 0) - target);
+                              for (const s of states) {
+                                const d = Math.abs((scoreMap[s] ?? 0) - target);
+                                if (d < bestDiff) { best = s; bestDiff = d; }
+                              }
+                              return best;
+                            }
                             const map = new Map<string, number>(states.map((s,i)=>[s,i]));
                             // Add an extra line break for more vertical spacing between category labels
                             const paddedStates = states.map(s => `${s}\n`);
@@ -2441,7 +2494,7 @@ export default function ReportsPage() {
                                 symbol: 'circle',
                               symbolSize: 5,
                               lineStyle: { width: 2 },
-                              data: s.points.map(p=>[p.step, map.get(p.state) ?? states.indexOf(p.state), p.sentiment]).filter(d=>d[1] >= 0),
+                              data: s.points.map(p=>{ const bucket = bucketFor(p.state); const yi = indexMap.get(bucket) ?? -1; return [p.step, yi, p.sentiment, p.screen, p.state]; }).filter(d=>d[1] >= 0),
                             }));
                             if (!series.length) return { graphic: [{ type:'text', left:'center', top:'middle', style:{ text:'No emotion timeline available', fill:'#94a3b8', fontSize: 14 } }] } as any;
                             return {
@@ -2450,8 +2503,8 @@ export default function ReportsPage() {
                               xAxis: { type: 'value', min: 1, max: maxStep, axisLabel: { color: '#cbd5e1' }, name: 'Step', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8' } },
                               yAxis: { type: 'category', data: paddedStates, axisLabel: { color: '#1e293b', fontWeight: 600, lineHeight: 20, margin: 12 }, name: 'Emotional State', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#94a3b8', padding: [0, 0, 6, 0], fontSize: 12, align: 'left' } },
                               legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' } },
-                              dataZoom: [ { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: 'shift' }, { type: 'slider', xAxisIndex: 0, start: 0, end: 30, height: 16, bottom: 6 } ],
-                              tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const sIdx=p?.data?.[1]; const sent=p?.data?.[2]; const state=states[sIdx]||''; return `${p.seriesName}<br/>Step ${step}: ${state}<br/>Sentiment: ${typeof sent==='number'?sent.toFixed(2):'-'}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
+                              dataZoom: [ { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: 'shift', moveOnMouseMove: 'shift', moveOnMouseWheel: false, preventDefaultMouseMove: false }, { type: 'slider', xAxisIndex: 0, start: 0, end: 30, height: 16, bottom: 6 } ],
+                              tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const yi=p?.data?.[1]; const sent=p?.data?.[2]; const screen=p?.data?.[3]||''; const observed=p?.data?.[4]||''; const plotted=states[yi]||''; const sentimentTxt=(typeof sent==='number'?(sent>=0?`+${sent.toFixed(2)}`:sent.toFixed(2)):'-'); return `${p.seriesName} · Step ${step}${screen?` · ${screen}`:''}<br/>Observed: ${observed} (sentiment ${sentimentTxt})<br/>Plotted as: ${plotted}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
                               series,
                             } as any;
                           })()} />
@@ -2750,9 +2803,9 @@ export default function ReportsPage() {
                                               type: 'inside', 
                                               xAxisIndex: 0, 
                                               filterMode: 'none',
-                                              zoomOnMouseWheel: 'shift', // Shift + scroll to zoom
-                                              moveOnMouseMove: true,      // Drag chart to pan
-                                              moveOnMouseWheel: true,     // Scroll to pan horizontally
+                                              zoomOnMouseWheel: 'shift',  // Only zoom when holding Shift
+                                              moveOnMouseMove: 'shift',   // Only pan when holding Shift and dragging
+                                              moveOnMouseWheel: false,    // Do not intercept normal page scroll
                                               preventDefaultMouseMove: false
                                             },
                                             // Slider zoom: mini-map overview bar at bottom for discrete navigation
