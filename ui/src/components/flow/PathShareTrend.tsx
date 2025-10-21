@@ -40,43 +40,150 @@ function PathShareTrend({
     return out;
   }, [JSON.stringify(series)]);
 
+  // Calculate the end percentage for dataZoom to show ~25 marks by default
+  const dataZoomEnd = React.useMemo(() => {
+    if (runs.length <= 25) return 100;
+    return (25 / runs.length) * 100;
+  }, [runs.length]);
+
   const option = React.useMemo(() => ({
     backgroundColor: 'transparent',
-    grid: { left: 40, right: 16, top: 10, bottom: 28 },
-    xAxis: { type: 'category', data: mounted ? runs : [], axisLabel: { color: '#94a3b8', fontSize: 11 } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: (v: number) => `${v}%` }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.15)' } } },
+    title: { text: 'Screen Name', left: 0, top: 0, textStyle: { color: '#cbd5e1', fontSize: 14, fontWeight: 600 } },
+    grid: { left: 70, right: 16, top: 40, bottom: 50, borderColor: 'rgba(148,163,184,0.15)', containLabel: false },
+    xAxis: {
+      type: 'category',
+      data: mounted ? runs : [],
+      axisLabel: { color: '#94a3b8', fontSize: 11, margin: 6 },
+      axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)', width: 1 } },
+      axisTick: { lineStyle: { color: 'rgba(148,163,184,0.15)' } },
+      gridIndex: 0
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: '#cbd5e1', formatter: (v: number) => `${v}%`, margin: 8, fontSize: 12, fontWeight: 500 },
+      axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)', width: 1 } },
+      axisTick: { lineStyle: { color: 'rgba(148,163,184,0.15)' } },
+      splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)', type: 'solid', width: 1 } },
+      name: 'Share %',
+      nameTextStyle: { color: '#cbd5e1', fontSize: 12, fontWeight: 500 },
+      nameGap: 12
+    },
+    dataZoom: [
+      {
+        type: 'slider',
+        show: true,
+        xAxisIndex: [0],
+        start: 0,
+        end: dataZoomEnd,
+        bottom: 20,
+        textStyle: { color: '#94a3b8' },
+        fillerColor: 'rgba(59, 130, 246, 0.25)',
+        borderColor: 'rgba(148,163,184,0.4)',
+        handleStyle: { color: '#3b82f6', borderColor: 'rgba(59,130,246,0.3)', borderWidth: 1 },
+        backgroundColor: 'rgba(148,163,184,0.08)',
+      }
+    ],
     tooltip: {
       trigger: 'axis',
+      backgroundColor: 'rgba(15, 23, 42, 0.95)',
+      borderColor: 'rgba(59, 130, 246, 0.5)',
+      borderWidth: 1,
+      textStyle: { color: '#e2e8f0', fontSize: 12, fontFamily: 'monospace' },
+      padding: [12, 14],
+      axisPointer: { type: 'cross', lineStyle: { color: 'rgba(59, 130, 246, 0.3)' } },
       formatter: (p: any) => {
-        const lines = p.map((it: any) => {
-          if (it.seriesName === 'Average') return null;
+        if (!p || !Array.isArray(p)) return '';
+        const runLabel = p[0]?.axisValue || '';
+        const lines = [`<div style="font-weight: 700; margin-bottom: 8px; color: #60a5fa; font-size: 13px;">▸ Run: ${runLabel}</div>`];
+
+        p.forEach((it: any) => {
+          if (it.seriesName === 'Average') return;
+          const curr = typeof it.data === 'number' ? it.data : Number(it?.value ?? 0);
           const prevRaw = it?.seriesData && it.seriesData[0] && Array.isArray(it.seriesData[0].data)
             ? it.seriesData[0].data[it.dataIndex - 1]
             : undefined;
           const prev = it.dataIndex > 0 && typeof prevRaw === 'number' ? Number(prevRaw) : 0;
-          const curr = typeof it.data === 'number' ? it.data : Number(it?.value ?? 0);
           const diff = curr - prev;
-          const sign = diff === 0 ? '' : (diff > 0 ? '+' : '');
-          const currText = Number.isFinite(curr) ? curr.toFixed(1) : String(curr ?? '0');
-          const diffText = Number.isFinite(diff) ? diff.toFixed(1) : '0.0';
-          return `${it.marker}${it.seriesName}: ${currText}% (${sign}${diffText} vs prev)`;
-        }).filter(Boolean);
-        return lines.join('<br/>');
+          const sign = diff === 0 ? '→' : (diff > 0 ? '↗' : '↘');
+          const color = diff === 0 ? '#94a3b8' : (diff > 0 ? '#10b981' : '#ef4444');
+          const currText = Number.isFinite(curr) ? curr.toFixed(1) : '0.0';
+          const diffText = Number.isFinite(diff) ? Math.abs(diff).toFixed(1) : '0.0';
+          lines.push(`<div style="margin: 6px 0; display: flex; align-items: center; gap: 8px;">${it.marker}<span style="font-weight: 500; flex: 1;">${it.seriesName}</span> <span style="color: #f0f9ff; font-weight: 600;">${currText}%</span> <span style="color: ${color}; font-weight: 700;">${sign} ${diffText}%</span></div>`);
+        });
+
+        // Add average line info
+        const avgIdx = p.findIndex((it: any) => it.seriesName === 'Average');
+        if (avgIdx >= 0) {
+          const avgVal = p[avgIdx].data;
+          lines.push(`<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(148,163,184,0.3); margin: 8px 0; font-weight: 500; color: #cbd5e1;">⊷ Avg: <span style="color: #a78bfa;">${Number.isFinite(avgVal) ? Number(avgVal).toFixed(1) : '0.0'}%</span></div>`);
+        }
+
+        return lines.join('');
       }
     },
-    legend: { show: false },
+    legend: {
+      show: true,
+      top: 5,
+      left: 75,
+      textStyle: { color: '#cbd5e1', fontSize: 12, fontWeight: 500 },
+      itemGap: 20,
+      itemWidth: 12,
+      itemHeight: 12,
+      data: [...(mounted ? sorted : []).map(s => s.name), 'Average'],
+      backgroundColor: 'rgba(15,23,42,0.3)',
+      borderColor: 'rgba(148,163,184,0.2)',
+      borderRadius: 6,
+      padding: [6, 12],
+    },
     series: [
       ...(mounted ? sorted : []).map((s, i) => ({
-        type: 'line', name: s.name, data: s.data, smooth: true,
-        symbol: 'circle', symbolSize: 6,
-        lineStyle: { width: 3, color: palette[i % palette.length], opacity: hoveredPath && hoveredPath !== s.name ? 0.15 : 1 },
-        itemStyle: { color: palette[i % palette.length], borderWidth: 1.2, borderColor: '#0b0f14', shadowBlur: hoveredPath === s.name ? 10 : 0, shadowColor: 'rgba(0,0,0,0.35)' },
-        areaStyle: { opacity: 0.1, color: palette[i % palette.length] },
+        type: 'line',
+        name: s.name,
+        data: s.data,
+        smooth: 0.4,
+        symbol: 'circle',
+        symbolSize: hoveredPath === s.name ? 10 : 7,
+        lineStyle: {
+          width: hoveredPath === s.name ? 4 : 3,
+          color: palette[i % palette.length],
+          opacity: hoveredPath && hoveredPath !== s.name ? 0.25 : 1,
+          cap: 'round',
+          join: 'round'
+        },
+        itemStyle: {
+          color: palette[i % palette.length],
+          borderWidth: 2,
+          borderColor: '#0f172a',
+          shadowBlur: hoveredPath === s.name ? 16 : 4,
+          shadowColor: `${palette[i % palette.length]}60`,
+          shadowOffsetY: hoveredPath === s.name ? 4 : 2,
+          opacity: hoveredPath && hoveredPath !== s.name ? 0.4 : 1
+        },
+        areaStyle: {
+          color: palette[i % palette.length],
+          opacity: hoveredPath === s.name ? 0.3 : 0.15
+        },
+        z: hoveredPath === s.name ? 20 : 5,
+        animationDuration: 300,
+        animationEasing: 'cubicOut'
       })),
-      // Dotted average trend
-      { type: 'line', name: 'Average', data: mounted ? avgLine : [], smooth: true, symbol: 'none', lineStyle: { width: 1.4, type: 'dotted', color: 'rgba(148,163,184,0.9)' }, z: 0 },
+      // Enhanced average trend line
+      {
+        type: 'line',
+        name: 'Average',
+        data: mounted ? avgLine : [],
+        smooth: 0.4,
+        symbol: 'diamond',
+        symbolSize: 4,
+        lineStyle: { width: 2, type: 'dashed', color: '#a78bfa', dashOffset: 5 },
+        itemStyle: { color: '#a78bfa', borderColor: '#0f172a', borderWidth: 1, opacity: 0.8 },
+        z: 3,
+        animationDuration: 400,
+        animationEasing: 'cubicOut'
+      },
     ],
-  }), [mounted, runs.join(','), JSON.stringify(sorted), JSON.stringify(avgLine), hoveredPath, palette.join(',')]);
+  }), [mounted, runs.join(','), runs.length, dataZoomEnd, JSON.stringify(sorted), JSON.stringify(avgLine), hoveredPath, palette.join(',')]);
+
 
   return (
     <ReactECharts

@@ -3,8 +3,29 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 const TeaThoughtTimeline = dynamic(() => import('../../components/TeaThoughtTimeline'), { ssr: false });
-// Professional muted palette (masculine/corporate): steels, indigos, teals, slate; amber accent
-const CHART_PALETTE = ['#5B6DAA', '#4B6B88', '#2F6F7E', '#64748B', '#1E3A8A', '#B45309', '#94A3B8', '#475569'];
+// Vibrant multi-hue palette: red, orange, yellow, green, teal, blue, indigo, purple, pink
+const CHART_PALETTE = [
+  '#ef4444', // red
+  '#f97316', // orange
+  '#f59e0b', // amber
+  '#eab308', // yellow
+  '#84cc16', // lime
+  '#22c55e', // green
+  '#10b981', // emerald
+  '#14b8a6', // teal
+  '#06b6d4', // cyan
+  '#0ea5e9', // sky
+  '#3b82f6', // blue
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#a855f7', // purple
+  '#d946ef', // fuchsia
+  '#ec4899', // pink
+  '#f43f5e', // rose
+  '#22d3ee', // light cyan
+  '#10b981', // emerald (repeat for long series)
+  '#fb7185', // soft red
+];
 function gradientColor(c1: string, c2: string) {
   if (typeof window !== 'undefined' && (window as any).echarts && (window as any).echarts.graphic) {
     const g = (window as any).echarts.graphic;
@@ -15,13 +36,33 @@ function gradientColor(c1: string, c2: string) {
   }
   return c1;
 }
+// Convert HSL to HEX to ensure ECharts (and canvas) use distinct hues reliably
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100; l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h >= 0 && h < 60) { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else { r = c; g = 0; b = x; }
+  const toHex = (v: number) => {
+    const n = Math.round((v + m) * 255);
+    const s = n.toString(16).padStart(2, '0');
+    return s;
+  };
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 import FancySelect from '../../components/FancySelect';
 import Link from 'next/link';
 import { IconQuestionCircle, IconActivity, IconDownload, IconLayers, IconX } from '../../components/icons';
 import FlowSankey from '../../components/flow/FlowSankey';
 import PathShareTrend from '../../components/flow/PathShareTrend';
 import PathRankList from '../../components/flow/PathRankList';
-import EmotionMix from '../../components/EmotionMix';
+// import EmotionMix from '../../components/EmotionMix';
 
 function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -101,6 +142,8 @@ export default function ReportsPage() {
   const paretoRef = useRef<any>(null);
   const severityRef = useRef<any>(null);
   const radarRef = useRef<any>(null);
+  const flowInsightsRef = useRef<any>(null);
+  const flowInsightsContainerRef = useRef<HTMLDivElement>(null);
   const [personaCards, setPersonaCards] = useState<Array<{ persona_id: string; persona_name?: string; avg_steps: number; completion_pct: number; dropoffs: number; friction_pct: number; drift?: number | null; sentiment_start?: number | null; sentiment_end?: number | null }>>([]);
   // Start in loading=true so server and client initial render match
   const [personaLoading, setPersonaLoading] = useState(true);
@@ -109,6 +152,8 @@ export default function ReportsPage() {
   const [personaModalTab, setPersonaModalTab] = useState<'think-aloud' | 'emotion' | 'path' | 'what-if'>('think-aloud');
   const [personaDetail, setPersonaDetail] = useState<any | null>(null);
   const [personaDetailLoading, setPersonaDetailLoading] = useState(false);
+  const [personaEmoSeries, setPersonaEmoSeries] = useState<Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number }> }>>([]);
+  const [personaEmoStates, setPersonaEmoStates] = useState<string[]>([]);
   const [selectedBacktrack, setSelectedBacktrack] = useState<{ name: string; count: number } | null>(null);
   // Flow insights shared state
   const [flowRuns, setFlowRuns] = useState<string[]>([]);
@@ -118,6 +163,9 @@ export default function ReportsPage() {
   const [flowLoading, setFlowLoading] = useState<boolean>(false);
   const [flowShowAll, setFlowShowAll] = useState<'top'|'all'>('top');
   const [flowRunWindow, setFlowRunWindow] = useState<number>(6);
+  // Per-user journeys (step-by-step screen sequences)
+  const [journeysData, setJourneysData] = useState<any[]>([]);
+  const [journeysLoading, setJourneysLoading] = useState<boolean>(false);
   function setChartRef(ref: any, inst: any) {
     try { ref.current = inst?.getEchartsInstance ? inst.getEchartsInstance() : null; } catch { ref.current = null; }
   }
@@ -168,6 +216,21 @@ export default function ReportsPage() {
     }
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+  // Hide Flow Insights hover/tooltip when clicking anywhere outside the chart
+  useEffect(() => {
+    function onOutsideClick(e: MouseEvent) {
+      const root = flowInsightsContainerRef.current;
+      if (!root) return;
+      if (!root.contains(e.target as Node)) {
+        try {
+          const inst = flowInsightsRef.current;
+          if (inst && inst.dispatchAction) inst.dispatchAction({ type: 'hideTip' } as any);
+        } catch {}
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick);
+    return () => document.removeEventListener('mousedown', onOutsideClick);
   }, []);
   // Reflect tab/persona in URL for shareability
   useEffect(() => {
@@ -406,15 +469,79 @@ export default function ReportsPage() {
         } catch {}
       }
       setPersonaDetail(data);
+      // Load emotion journeys for Sentiment Drift (y: emotional_state, x: step)
+      try {
+        const emoResp = await fetch(`/api/persona_emotions?runId=${encodeURIComponent(runId)}&personaId=${encodeURIComponent(personaId)}`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store'
+        });
+        if (emoResp.ok) {
+          const ej = await emoResp.json();
+          const journeys: any[] = Array.isArray(ej?.emotion_journeys) ? ej.emotion_journeys : [];
+          const series: Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number }> }> = [];
+          const states = new Set<string>();
+          for (const j of journeys) {
+            const name = String(j?.userId || j?.user_id || 'user');
+            const ptsRaw: any[] = Array.isArray(j?.emotions) ? j.emotions : [];
+            const points: Array<{ step: number; state: string; sentiment: number }> = [];
+            for (const p of ptsRaw) {
+              const step = Number(p?.step ?? 0);
+              const stateArr: string[] = Array.isArray(p?.emotional_state) ? p.emotional_state : [];
+              const primary = String((stateArr[0] ?? p?.emotion ?? '').toString().toLowerCase());
+              const sentiment = Number(p?.sentiment_value ?? 0);
+              if (step > 0 && primary) { points.push({ step, state: primary, sentiment }); states.add(primary); }
+            }
+            if (points.length) series.push({ name, points });
+          }
+          setPersonaEmoSeries(series);
+          setPersonaEmoStates(Array.from(states));
+        } else {
+          setPersonaEmoSeries([]); setPersonaEmoStates([]);
+        }
+      } catch { setPersonaEmoSeries([]); setPersonaEmoStates([]); }
       // Initialize Flow Insights series based on current persona paths
       try {
         const topPaths: string[] = Array.isArray((data || {}).paths) ? (data.paths as any[]).map(p => String(p.path || '')).slice(0, 5) : [];
         await loadFlowTrends(runId, personaId, topPaths, flowRunWindow);
       } catch {}
+      // Load per-user journeys for this persona
+      try {
+        await loadPersonaJourneys(runId, personaId);
+      } catch {}
     } catch (e) {
       setPersonaDetail(null);
     } finally {
       setPersonaDetailLoading(false);
+    }
+  }
+
+  // Load per-user journeys from backend (step-by-step sequences)
+  async function loadPersonaJourneys(runId: string, personaId: string) {
+    try {
+      if (!runId || !personaId) { setJourneysData([]); return; }
+      setJourneysLoading(true);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+      const qs = new URLSearchParams({ runId, personaId, ...(token ? { token } : {}) }).toString();
+      const r = await fetch(`/api/journeys?${qs}`, { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+      if (!r.ok) { setJourneysData([]); return; }
+      let j: any = {};
+      try { j = await r.json(); } catch { j = {}; }
+      let arr: any[] = [];
+      if (Array.isArray(j)) arr = j;
+      else if (Array.isArray(j?.journeys)) arr = j.journeys;
+      // Normalize to { name, steps: [{screen_name}] }
+      const normalized = arr.slice(0, 50).map((it: any, idx: number) => {
+        const stepsRaw = Array.isArray(it?.steps)
+          ? it.steps
+          : (Array.isArray(it?.sequence) ? it.sequence : (typeof it?.path === 'string' ? String(it.path).split('>').map((s: string) => ({ screen_name: s.trim() })) : []));
+        const steps = (stepsRaw || []).map((s: any) => ({ screen_name: String(s?.screen_name || s?.screen || s?.frame_name || '') }));
+        const name = String(it?.user?.name || it?.name || it?.user_id || `User ${idx + 1}`);
+        return { name, steps };
+      });
+      setJourneysData(normalized);
+    } catch {
+      setJourneysData([]);
+    } finally {
+      setJourneysLoading(false);
     }
   }
 
@@ -2044,7 +2171,8 @@ export default function ReportsPage() {
                               <button
                                 className="btn-gradient btn-sm"
                                 onClick={() => {/* Detailed TEA logic */}}
-                                style={{ fontSize: 13 }}
+                                style={{ fontSize: 13, opacity: 0.5, cursor: 'not-allowed' }}
+                                disabled
                               >
                                 Detailed TEA
                               </button>
@@ -2216,7 +2344,7 @@ export default function ReportsPage() {
                         {personaModalTab === 'think-aloud' && (
                           <div className="persona-modal-nav-subitems">
                             <a href="#unique-tea" className="persona-modal-nav-subitem">Unique TEA</a>
-                            <a href="#detailed-tea" className="persona-modal-nav-subitem">Detailed TEA</a>
+                            <a href="#detailed-tea" className="persona-modal-nav-subitem" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Detailed TEA</a>
                           </div>
                         )}
 
@@ -2228,8 +2356,8 @@ export default function ReportsPage() {
                         </button>
                         {personaModalTab === 'emotion' && (
                           <div className="persona-modal-nav-subitems">
-                            <a href="#emotion-mix" className="persona-modal-nav-subitem">Emotion Mix</a>
                             <a href="#sentiment-drift" className="persona-modal-nav-subitem">Sentiment Drift</a>
+                            <a href="#emotion-mix" className="persona-modal-nav-subitem">Emotion Mix</a>
                           </div>
                         )}
 
@@ -2241,9 +2369,9 @@ export default function ReportsPage() {
                         </button>
                         {personaModalTab === 'path' && (
                           <div className="persona-modal-nav-subitems">
-                            <a href="#flow-insights" className="persona-modal-nav-subitem">Flow Insights</a>
-                            <a href="#exits" className="persona-modal-nav-subitem">Exits</a>
-                            <a href="#backtracks" className="persona-modal-nav-subitem">Backtracks</a>
+                            <a href="#flow-insights" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('flow-insights'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});}}>Flow Insights</a>
+                            <a href="#backtracks" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('backtracks'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});}}>Backtracks</a>
+                            <a href="#exits" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('exits'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});}}>Exits</a>
                           </div>
                         )}
 
@@ -2288,242 +2416,44 @@ export default function ReportsPage() {
                             {/* Emotion Composition Tab */}
                             {personaModalTab === 'emotion' && (
                               <>
-                        {/* Emotion mix */}
-                        <div id="emotion-mix" className="tile">
-                          <h4>Emotion Mix</h4>
-                          <ReactECharts style={{ height: 260 }} option={(function(){
-                            // Prefer DB TEA aggregate; if empty, fall back to journey emotions array
-                            const teaEmo = (personaDetail?.tea?.emotions && typeof personaDetail.tea.emotions === 'object') ? personaDetail.tea.emotions : {};
-                            const hasTea = Object.keys(teaEmo || {}).length > 0;
-                            const pretty = (s: string) => String(s || '')
-                              .replace(/_/g, ' ')
-                              .replace(/\b([a-z])/g, (_, c) => c.toUpperCase());
-                            const journeyArr: Array<{ name?: string; count?: number; color?: string; emoji?: string; }>
-                              = Array.isArray((personaDetail as any)?.emotions) ? (personaDetail as any).emotions : [];
-                            const colorByName: Record<string, { color?: string; emoji?: string; }>
-                              = (journeyArr || []).reduce((acc:any, e:any) => { acc[String(e?.name||'').toLowerCase()] = { color: e?.color, emoji: e?.emoji }; return acc; }, {});
-
-                            // Build pairs and sort desc
-                            let pairs: Array<{ name: string; value: number; color?: string; emoji?: string }>; 
-                            if (hasTea) {
-                              pairs = Object.keys(teaEmo || {}).map((k) => {
-                                const key = String(k||'');
-                                const meta = colorByName[key.toLowerCase()] || {};
-                                return { name: pretty(key), value: Number((teaEmo as any)[k] || 0), color: meta.color, emoji: meta.emoji };
-                              });
-                            } else {
-                              pairs = (journeyArr || []).map((e:any) => ({ name: pretty(String(e?.name||'')), value: Number(e?.count||0), color: e?.color, emoji: e?.emoji }));
-                            }
-                            pairs = pairs.filter(p => Number.isFinite(p.value) && p.value > 0).sort((a,b)=>b.value-a.value);
-                            const total = pairs.reduce((s,p)=> s + p.value, 0);
-                            const labels = pairs.map(p => (p.emoji ? `${p.emoji} ${p.name}` : p.name));
-                            const seriesData = pairs.map((p, i) => ({
-                              value: p.value,
-                              itemStyle: { color: p.color || CHART_PALETTE[i % CHART_PALETTE.length], borderRadius: [4,4,4,4] },
-                            }));
-
-                            return {
-                              backgroundColor: 'transparent',
-                              grid: { left: 140, right: 24, top: 24, bottom: 40 },
-                              xAxis: {
-                                type: 'value',
-                                name: 'Users',
-                                nameTextStyle: { color: '#cbd5e1' },
-                                nameGap: 16,
-                                axisLabel: { color: '#cbd5e1' },
-                                splitLine: { show: true, lineStyle: { color: 'rgba(148,163,184,0.15)' } },
-                              },
-                              yAxis: {
-                                type: 'category',
-                                name: 'Emotion',
-                                nameTextStyle: { color: '#cbd5e1' },
-                                nameGap: 10,
-                                data: labels,
-                                axisLabel: { color: '#cbd5e1', interval: 0, width: 120 as any, overflow: 'truncate' as any, lineHeight: 18 as any, margin: 10 as any },
-                              },
-                              series: [{ 
-                                type: 'bar', 
-                                data: seriesData, 
-                                barWidth: 16,
-                                label: {
-                                  show: true,
-                                  position: 'right',
-                                  color: '#e5e7eb',
-                                  fontSize: 11,
-                                  formatter: (p:any) => {
-                                    const v = Number(p?.value||0);
-                                    const pct = total>0 ? ((v/total)*100).toFixed(1) : '0.0';
-                                    return `${v} (${pct}%)`;
-                                  },
-                                },
-                              }],
-                              tooltip: { 
-                                trigger: 'item', 
-                                backgroundColor: 'rgba(2,6,23,0.92)',
-                                borderColor: 'rgba(148,163,184,0.25)',
-                                textStyle: { color: '#e5e7eb' },
-                                formatter: (p: any) => {
-                                  const v = Number(p.value)||0;
-                                  const pct = total>0 ? ((v/total)*100).toFixed(1) : '0.0';
-                                  return `${p.name}: <b>${v}</b> users (${pct}%)`;
-                                }
-                              }
-                            };
-                          })()} />
-                        </div>
+                        {/* Emotion Mix removed per request */}
 
                         {/* Emotion Mix */}
-                        {Array.isArray((personaDetail as any)?.emotions) && (personaDetail as any).emotions.length > 0 && (
-                          <div style={{ marginTop: 12 }}>
-                            <EmotionMix
-                              emotions={Array.isArray((personaDetail as any).emotions) ? (personaDetail as any).emotions : []}
-                              emotionJourney={Array.isArray((personaDetail as any).emotion_journey) ? (personaDetail as any).emotion_journey : []}
-                            />
-                          </div>
-                        )}
+                        {/* EmotionMix removed */}
 
-                        {/* Sentiment drift */}
+                        {/* Sentiment drift from emotions API (x: step, y: emotional state) */}
                         <div id="sentiment-drift" className="tile" style={{ marginTop: 12 }}>
                           <h4>Sentiment Drift</h4>
-                          <ReactECharts style={{ height: 220 }} option={(function(){
-                            const seriesData = Array.isArray((personaDetail as any)?.sentiment_series)
-                              ? ((personaDetail as any).sentiment_series as Array<{ idx:number; valence:number; screen_name?:string }> )
-                              : [];
-                            const xs = seriesData.length > 1
-                              ? seriesData.map((p,i)=> p.screen_name || `#${i+1}`)
-                              : ['Start','End'];
-                            const ys = seriesData.length > 1
-                              ? seriesData.map(p=> Number(p.valence ?? 0.5))
-                              : [Number(personaDetail?.tea?.sentiment_start ?? 0), Number(personaDetail?.tea?.sentiment_end ?? 0)];
-                            const s0 = ys[0] ?? 0;
-                            const s1 = ys[ys.length-1] ?? 0;
-                            const base = 0.5;
+                          <ReactECharts style={{ height: 260 }} option={(function(){
+                            const DEFAULT_STATES = ['rage','anger','frustration','sadness','disgust','fear','surprise','neutral','calm','content','joy','excitement','delight'];
+                            const states = Array.from(new Set([ ...DEFAULT_STATES, ...personaEmoStates ]));
+                            const map = new Map<string, number>(states.map((s,i)=>[s,i]));
+                            const maxStep = Math.max(10, ...personaEmoSeries.flatMap(s=>s.points.map(p=>p.step)));
+                            const series = personaEmoSeries.map((s, idx) => ({
+                              name: s.name,
+                              type: 'line',
+                              smooth: 0.25,
+                              showSymbol: true,
+                              symbol: 'circle',
+                              symbolSize: 5,
+                              lineStyle: { width: 2 },
+                              data: s.points.map(p=>[p.step, map.get(p.state) ?? states.indexOf(p.state), p.sentiment]).filter(d=>d[1] >= 0),
+                            }));
+                            if (!series.length) return { graphic: [{ type:'text', left:'center', top:'middle', style:{ text:'No emotion timeline available', fill:'#94a3b8', fontSize: 14 } }] } as any;
                             return {
                               backgroundColor: 'transparent',
-                              grid: { left: 60, right: 20, top: 20, bottom: 50 },
-                              xAxis: { 
-                                type: 'category', 
-                                data: xs, 
-                                axisLabel: { color: '#cbd5e1', interval: (seriesData.length>8? 'auto' : 0) },
-                                name: (seriesData.length>1 ? 'Screens' : 'Test Phase'),
-                                nameLocation: 'middle',
-                                nameGap: 25,
-                                nameTextStyle: { color: '#94a3b8', fontSize: 12 }
-                              },
-                              yAxis: { 
-                                type: 'value', 
-                                min: 0, max: 1,
-                                axisLabel: { color: '#cbd5e1' },
-                                splitLine: { lineStyle: { color: 'rgba(148,163,184,0.15)' } },
-                                name: 'Sentiment Score',
-                                nameLocation: 'middle',
-                                nameGap: 40,
-                                nameTextStyle: { color: '#94a3b8', fontSize: 12 }
-                              },
-                              series: [{ 
-                                type: 'line', 
-                                data: ys, 
-                                smooth: true, 
-                                lineStyle: { width: 3, color: (s1 - s0 >= 0 ? '#34D399' : '#F87171') }, 
-                                areaStyle: { color: (s1 - s0 >= 0 ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)') },
-                                symbol: 'circle',
-                                symbolSize: 6,
-                                itemStyle: { color: '#93c5fd' }
-                              }, {
-                                // baseline at 0.5
-                                type: 'line',
-                                data: ys.map(()=> base),
-                                smooth: false,
-                                lineStyle: { width: 1, color: 'rgba(148,163,184,0.35)', type: 'dashed' },
-                                symbol: 'none',
-                                tooltip: { show: false }
-                              }],
-                              tooltip: { 
-                                trigger: 'axis',
-                                formatter: (params: any) => {
-                                  try {
-                                    const param = Array.isArray(params) ? params[0] : params;
-                                    const phase = param?.name ?? '';
-                                    const rawVal = param?.value;
-                                    const valNum = typeof rawVal === 'number' ? rawVal : Number(rawVal);
-                                    const valText = Number.isFinite(valNum) ? valNum.toFixed(3) : String(rawVal ?? '0');
-                                    const change = s1 - s0;
-                                    const direction = change > 0 ? '↑' : change < 0 ? '↓' : '→';
-                                    return `${phase}: ${valText}<br/>Δ ${direction} ${Math.abs(change).toFixed(3)}`;
-                                  } catch {
-                                    return '';
-                                  }
-                                }
-                              },
-                            };
+                              grid: { left: 70, right: 20, top: 20, bottom: 40, containLabel: true },
+                              xAxis: { type: 'value', min: 1, max: maxStep, axisLabel: { color: '#cbd5e1' }, name: 'Step', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8' } },
+                              yAxis: { type: 'category', data: states, axisLabel: { color: '#cbd5e1' }, name: 'Emotional State', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#94a3b8', padding: [0, 0, 6, 0], fontSize: 12, align: 'left' } },
+                              legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' } },
+                              dataZoom: [ { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: 'shift' }, { type: 'slider', xAxisIndex: 0, start: 0, end: 30, height: 16, bottom: 6 } ],
+                              tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const sIdx=p?.data?.[1]; const sent=p?.data?.[2]; const state=states[sIdx]||''; return `${p.seriesName}<br/>Step ${step}: ${state}<br/>Sentiment: ${typeof sent==='number'?sent.toFixed(2):'-'}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
+                              series,
+                            } as any;
                           })()} />
                         </div>
 
-                        {/* Flow Insights (Sankey + Trendlines + Ranked List) */}
-                        <div id="flow-insights" className="tile" style={{ marginTop: 12 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h4 style={{ margin: 0 }}>Flow Insights</h4>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <label className="muted" style={{ fontSize: 12 }}>Runs:</label>
-                              <div style={{ width: 90 }}>
-                                <FancySelect
-                                  value={String(flowRunWindow)}
-                                  onChange={(v)=>setFlowRunWindow(Number(v)||1)}
-                                  options={[1,4,6,8,10].map(n=>({ value: String(n), label: String(n) }))}
-                                  searchable={false}
-                                />
-                              </div>
-                              <div role="tablist" aria-label="Paths scope" style={{ position:'relative', display:'inline-grid', gridTemplateColumns:'1fr 1fr', border:'1px solid var(--border)', borderRadius:999, overflow:'hidden' }}>
-                                <span aria-hidden style={{ position:'absolute', top:2, bottom:2, left: (flowShowAll==='top'?2:'50%'), width:'calc(50% - 4px)', background:'linear-gradient(180deg, rgba(59,130,246,0.25), rgba(59,130,246,0.12))', borderRadius:999, transition:'left .18s ease' }} />
-                                <button role="tab" aria-selected={flowShowAll==='top'} onClick={()=>setFlowShowAll('top')} style={{ padding:'6px 12px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1, fontSize:12 }}>Top 5</button>
-                                <button role="tab" aria-selected={flowShowAll==='all'} onClick={()=>setFlowShowAll('all')} style={{ padding:'6px 12px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1, fontSize:12 }}>All</button>
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
-                            Top navigation paths, how they connect between screens, and how each path's share changes across recent runs.
-                          </div>
-                          <div style={{ display: 'grid', gap: 12 }}>
-                            <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
-                            <FlowSankey
-                              paths={(personaDetail?.paths || []).slice(0, flowShowAll==='top'?5:Infinity)}
-                              totalUsers={Number((personaDetail as any)?.tea?.users_total || (personaDetail as any)?.users_total || (personaCards.find(p=>p.persona_id===openPersonaId) as any)?.users_total || 0)}
-                              hoveredPath={flowHoverPath}
-                              selectedPath={flowSelectedPath}
-                              onHover={setFlowHoverPath}
-                              onSelect={(p)=>setFlowSelectedPath(p)}
-                            />
-                            </div>
-                            <div style={{ borderTop: '1px dashed rgba(148,163,184,0.18)' }} />
-                            <PathShareTrend
-                              runs={flowRuns}
-                              series={flowSeries}
-                              hoveredPath={flowHoverPath}
-                              onHover={setFlowHoverPath}
-                            />
-                            {(personaDetail?.paths || []).length > 0 && (
-                              <div style={{ overflowX: 'auto' }}>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0', margin: '2px 0 8px' }}>Path Distribution</div>
-                                <PathRankList
-                                  items={(function(){
-                                    const arr = (personaDetail?.paths || []);
-                                    if (flowShowAll==='all') return arr;
-                                    const top = arr.slice(0,5);
-                                    const rest = arr.slice(5);
-                                    const totalOther = rest.reduce((s:any,it:any)=> s + Number(it.sharePct||0), 0);
-                                    const usersOther = rest.reduce((s:any,it:any)=> s + Number(it.count||0), 0);
-                                    if (rest.length>0) top.push({ path: 'Other', sharePct: Math.round(totalOther*10)/10, count: usersOther });
-                                    return top;
-                                  })()}
-                                  hoveredPath={flowHoverPath}
-                                  selectedPath={flowSelectedPath}
-                                  onHover={setFlowHoverPath}
-                                  onSelect={(p)=>setFlowSelectedPath(p)}
-                                />
-                            </div>
-                          )}
-                          </div>
-                        </div>
+                        {/* Flow Insights removed per request */}
 
                         {/* Exits */}
                         <div id="exits" className="tile" style={{ marginTop: 12 }}>
@@ -2744,9 +2674,223 @@ export default function ReportsPage() {
                             {personaModalTab === 'path' && (
                               <>
                                 {/* Flow insights content here */}
-                                <div className="tile">
+                                <div className="tile" ref={flowInsightsContainerRef}>
                                   <h4>Flow Insights</h4>
-                                  <div className="muted">Path analysis coming soon</div>
+                                  <ReactECharts 
+                                    onChartReady={(i:any)=>setChartRef(flowInsightsRef, { getEchartsInstance: ()=>i })}
+                                    style={{ height: 420, width: '100%', margin: 0 }} 
+                                    option={(() => {
+                                      // Prefer real per-user journeys when available; fall back to aggregated paths
+                                      const journeys = journeysData;
+                                      if (Array.isArray(journeys) && journeys.length > 0) {
+                                        // Build screen set and max steps
+                                        const screensSet = new Set<string>();
+                                        let maxSteps = 0;
+                                        journeys.forEach((j: any) => {
+                                          const steps = Array.isArray(j?.steps) ? j.steps : [];
+                                          maxSteps = Math.max(maxSteps, steps.length);
+                                          steps.forEach((s: any) => { const n = String(s?.screen_name || s?.screen || ''); if (n) screensSet.add(n); });
+                                        });
+                                        const screenList = Array.from(screensSet);
+                                        const xLabels = Array.from({ length: Math.max(maxSteps, 40) }, (_: any, i: number) => String(i + 1));
+                                        const wrap = (v: string) => v.length > 18 ? v.replace(/(.{18})/g, '$1\n') : v;
+
+                                        const visibleJourneys = journeys.slice(0, 30);
+                                        const seriesCount = visibleJourneys.length;
+                                        // Professional muted palette with reduced saturation and adjusted lightness
+                                        const colors = Array.from({ length: seriesCount }, (_: any, i: number) => hslToHex((360 * i) / Math.max(1, seriesCount), 45, 48));
+                                        const series = visibleJourneys.map((j: any, idx: number) => {
+                                          const steps = Array.isArray(j?.steps) ? j.steps : [];
+                                          const data = steps.map((s: any, i: number) => [i + 1, String(s?.screen_name || s?.screen || '')]);
+                                          return {
+                                            name: String(j?.name || `User ${idx + 1}`),
+                                            type: 'line',
+                                            data,
+                                            smooth: 0.15,
+                                            lineStyle: { color: colors[idx], width: 2 },
+                                            itemStyle: { color: colors[idx] },
+                                            showSymbol: true,
+                                            symbol: 'circle',
+                                            symbolSize: 5,
+                                            emphasis: { focus: 'series' }
+                                          };
+                                        });
+
+                                        return {
+                                          color: colors,
+                                          animationDuration: 600,
+                                          tooltip: { trigger: 'item', backgroundColor: 'rgba(0,0,0,0.8)', borderColor: '#374151', textStyle: { color: '#f9fafb' }, formatter: (p: any) => `${p.seriesName}<br/>Step ${p.data[0]}: ${p.data[1]}`, confine: true, triggerOn: 'mousemove', alwaysShowContent: false, enterable: false, showDelay: 0, hideDelay: 0, transitionDuration: 0.05 },
+                                          legend: { top: 10, right: 10, orient: 'horizontal', align: 'auto', type: 'scroll', textStyle: { color: '#1f2937', fontSize: 12, fontWeight: 600 }, itemWidth: 18, itemHeight: 10, icon: 'roundRect' },
+                                          grid: { left: 0, right: 16, bottom: 50, top: 80, containLabel: true },
+                                          xAxis: { type: 'category', name: 'Step', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#1e293b', fontWeight: 600 }, axisLabel: { color: '#1e293b', fontWeight: 500, interval: 0 }, axisTick: { show: true, alignWithLabel: true, lineStyle: { color: '#1e293b' } }, boundaryGap: false, axisPointer: { show: false }, axisLine: { lineStyle: { color: '#374151' } }, splitLine: { show: true, lineStyle: { color: '#e2e8f0', type: 'dashed', width: 1 } }, data: xLabels },
+                                          yAxis: { type: 'category', name: 'Screen Name', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#1e293b', fontWeight: 800, fontSize: 14, align: 'left' }, axisLabel: { color: '#334155', fontSize: 11, fontWeight: 500, lineHeight: 15, hideOverlap: false, interval: 0, formatter: (v: string) => v.length > 20 ? v.substring(0, 18) + '...' : v, margin: 8 }, axisTick: { show: true, alignWithLabel: true, lineStyle: { color: '#cbd5e1' } }, axisLine: { lineStyle: { color: '#cbd5e1', width: 1 } }, boundaryGap: true, data: screenList },
+                                          dataZoom: [
+                                            // Inside zoom: mouse wheel + trackpad pinch/drag for smooth navigation
+                                            { 
+                                              type: 'inside', 
+                                              xAxisIndex: 0, 
+                                              filterMode: 'none',
+                                              zoomOnMouseWheel: 'shift', // Shift + scroll to zoom
+                                              moveOnMouseMove: true,      // Drag chart to pan
+                                              moveOnMouseWheel: true,     // Scroll to pan horizontally
+                                              preventDefaultMouseMove: false
+                                            },
+                                            // Slider zoom: mini-map overview bar at bottom for discrete navigation
+                                            {
+                                              type: 'slider',
+                                              xAxisIndex: 0,
+                                              start: 0,        // Start at 0%
+                                              end: Math.min((25 / maxSteps) * 100, 100),  // Show ~25 steps initially
+                                              minSpan: (5 / maxSteps) * 100,      // Minimum 5 steps visible
+                                              maxSpan: 100,    // Can expand to show all steps
+                                              zoomLock: false,
+                                              height: 20,
+                                              bottom: 5,
+                                              borderRadius: 8,
+                                              backgroundColor: '#f1f5f9',
+                                              borderColor: '#cbd5e1',
+                                              fillerColor: 'rgba(59,130,246,0.25)',
+                                              handleIcon: 'path://M0,0 L0,20 L6,20 L6,0 Z',
+                                              handleSize: '100%',
+                                              handleStyle: { 
+                                                color: '#3b82f6',
+                                                borderColor: '#1e40af', 
+                                                borderWidth: 1.5, 
+                                                shadowBlur: 3, 
+                                                shadowColor: 'rgba(0,0,0,0.2)',
+                                                borderRadius: 4
+                                              },
+                                              moveHandleSize: 8,
+                                              showDetail: true,
+                                              showDataShadow: true,
+                                              brushSelect: true,
+                                              dataBackground: {
+                                                lineStyle: { color: '#94a3b8', width: 1 },
+                                                areaStyle: { color: 'rgba(148,163,184,0.1)' }
+                                              },
+                                              selectedDataBackground: {
+                                                lineStyle: { color: '#3b82f6', width: 1.5 },
+                                                areaStyle: { color: 'rgba(59,130,246,0.15)' }
+                                              },
+                                              textStyle: { color: '#1e293b', fontSize: 11 },
+                                              emphasis: {
+                                                handleStyle: {
+                                                  color: '#2563eb',
+                                                  shadowBlur: 6,
+                                                  shadowColor: 'rgba(37,99,235,0.4)'
+                                                }
+                                              },
+                                              throttle: 20,
+                                              realtime: true
+                                            },
+                                          ],
+                                          series
+                                        } as any;
+                                      }
+
+                                      // Fallback: aggregated paths
+                                      const paths = personaDetail?.paths || [];
+                                      if (!paths.length) {
+                                        return {
+                                          graphic: [{ 
+                                            type: 'text', 
+                                            left: 'center', 
+                                            top: 'middle', 
+                                            style: { 
+                                              text: 'No path data available', 
+                                              fill: '#94a3b8', 
+                                              fontSize: 14 
+                                            } 
+                                          }] 
+                                        };
+                                      }
+
+                                      // Extract all unique screen names from paths
+                                      const allScreens = new Set<string>();
+                                      paths.forEach((p: any) => {
+                                        const pathStr = String(p.path || '');
+                                        const screens = pathStr.split('>').map(s => s.trim()).filter(Boolean);
+                                        screens.forEach(screen => allScreens.add(screen));
+                                      });
+                                      const screenList = Array.from(allScreens);
+
+                                      // Create series data for top 5 paths (representing user journeys)
+                                      const topPaths = paths.slice(0, 5);
+                                      // Determine the maximum number of steps across the selected paths
+                                      const stepCounts = topPaths.map((p: any) => {
+                                        const ps = String(p.path || '');
+                                        return ps.split('>').map(s => s.trim()).filter(Boolean).length;
+                                      });
+                                      const maxSteps = stepCounts.length ? Math.max(...stepCounts) : 0;
+                                      const series = topPaths.map((path: any, index: number) => {
+                                        const pathStr = String(path.path || '');
+                                        const screens = pathStr.split('>').map(s => s.trim()).filter(Boolean);
+                                        const userData = screens.map((screen, stepIndex) => [
+                                          stepIndex + 1,
+                                          screen
+                                        ]);
+                                        
+                                        return {
+                                          name: `Path ${index + 1} (${path.sharePct || 0}%)`,
+                                          type: 'line',
+                                          data: userData,
+                                          lineStyle: { color: hslToHex((360 * index) / Math.max(1, topPaths.length), 45, 48), width: 2 },
+                                          itemStyle: { color: hslToHex((360 * index) / Math.max(1, topPaths.length), 45, 48) },
+                                          showSymbol: true,
+                                          symbol: 'circle',
+                                          symbolSize: 6,
+                                          emphasis: { focus: 'series' }
+                                        };
+                                      });
+
+                                      return {
+                                        tooltip: {
+                                          trigger: 'item',
+                                          backgroundColor: 'rgba(0,0,0,0.8)',
+                                          borderColor: '#374151',
+                                          textStyle: { color: '#f9fafb' },
+                                          formatter: function(params: any) {
+                                            return `${params.seriesName}<br/>Step ${params.data[0]}: ${params.data[1]}`;
+                                          }
+                                        },
+                                        legend: {
+                                          top: 30,
+                                          textStyle: { color: '#e2e8f0', fontSize: 11 }
+                                        },
+                                        grid: {
+                                          left: '3%',
+                                          right: '4%',
+                                          bottom: '3%',
+                                          top: '15%',
+                                          containLabel: true
+                                        },
+                                        xAxis: {
+                                          type: 'category',
+                                          name: 'Step Count',
+                                          nameLocation: 'middle',
+                                          nameGap: 30,
+                                          nameTextStyle: { color: '#94a3b8' },
+                                          axisLabel: { color: '#cbd5e1', interval: 0 },
+                                          axisTick: { show: true, alignWithLabel: true },
+                                          boundaryGap: false,
+                                          axisLine: { lineStyle: { color: '#374151' } },
+                                          splitLine: { show: true, lineStyle: { color: '#374151', type: 'dashed' } },
+                                          data: Array.from({ length: maxSteps }, (_: any, i: number) => String(i + 1))
+                                        },
+                                        yAxis: {
+                                          type: 'category',
+                                          name: 'Screen Name',
+                                          nameLocation: 'middle',
+                                          nameGap: 80,
+                                          nameTextStyle: { color: '#94a3b8' },
+                                          axisLabel: { color: '#cbd5e1', fontSize: 10 },
+                                          axisLine: { lineStyle: { color: '#374151' } },
+                                          data: screenList
+                                        },
+                                        series: series
+                                      };
+                                    })()}
+                                  />
                                 </div>
                               </>
                             )}
