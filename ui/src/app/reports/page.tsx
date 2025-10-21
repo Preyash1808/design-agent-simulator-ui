@@ -505,9 +505,24 @@ export default function ReportsPage() {
           const journeys: any[] = Array.isArray(ej?.emotion_journeys) ? ej.emotion_journeys : [];
           const series: Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number; screen?: string }> }> = [];
           const states = new Set<string>();
+          const firstName = (raw: any): string => {
+            let s = String(raw ?? '').trim();
+            if (!s) return '';
+            const at = s.indexOf('@');
+            if (at > 0) s = s.slice(0, at);
+            const parts = s.split(/[\s._-]+/).filter(Boolean);
+            if (!parts.length) return '';
+            let f = parts[0];
+            if (/^user\d*$/i.test(f) || /^user$/i.test(f) || /^usr$/i.test(f) || /^guest$/i.test(f) || /^id$/i.test(f)) {
+              f = parts[1] || '';
+            }
+            if (!f) return '';
+            return f.charAt(0).toUpperCase() + f.slice(1);
+          };
           for (let ji = 0; ji < journeys.length; ji++) {
             const j = journeys[ji];
-            const name = `User ${ji + 1}`;
+            const rawName = j?.firstName ?? j?.fullName ?? j?.user_name ?? j?.name ?? j?.userName ?? j?.username ?? j?.user ?? j?.userId;
+            const displayName = firstName(rawName) || `User ${ji + 1}`;
             const ptsRaw: any[] = Array.isArray(j?.emotions) ? j.emotions : [];
             const points: Array<{ step: number; state: string; sentiment: number; screen?: string }> = [];
             for (const p of ptsRaw) {
@@ -518,7 +533,7 @@ export default function ReportsPage() {
               const screen = String(p?.screen_name || p?.screen || '');
               if (step > 0 && primary) { points.push({ step, state: primary, sentiment, screen }); states.add(primary); }
             }
-            if (points.length) series.push({ name, points });
+            if (points.length) series.push({ name: displayName, points });
           }
           setPersonaEmoSeries(series);
           setPersonaEmoStates(Array.from(states));
@@ -557,13 +572,27 @@ export default function ReportsPage() {
       if (Array.isArray(j)) arr = j;
       else if (Array.isArray(j?.journeys)) arr = j.journeys;
       // Normalize to { name, steps: [{screen_name}] }
+      const pickFirstName = (raw: any): string => {
+        let s = String(raw ?? '').trim();
+        if (!s) return '';
+        const at = s.indexOf('@');
+        if (at > 0) s = s.slice(0, at);
+        const parts = s.split(/[\s._-]+/).filter(Boolean);
+        if (!parts.length) return '';
+        let f = parts[0];
+        if (/^user\d*$/i.test(f) || /^user$/i.test(f) || /^usr$/i.test(f) || /^guest$/i.test(f) || /^id$/i.test(f)) {
+          f = parts[1] || '';
+        }
+        if (!f) return '';
+        return f.charAt(0).toUpperCase() + f.slice(1);
+      };
       const normalized = arr.slice(0, 50).map((it: any, idx: number) => {
         const stepsRaw = Array.isArray(it?.steps)
           ? it.steps
           : (Array.isArray(it?.sequence) ? it.sequence : (typeof it?.path === 'string' ? String(it.path).split('>').map((s: string) => ({ screen_name: s.trim() })) : []));
         const steps = (stepsRaw || []).map((s: any) => ({ screen_name: String(s?.screen_name || s?.screen || s?.frame_name || '') }));
-        // Force display name to 'User N' regardless of backend-provided name
-        const name = `User ${idx + 1}`;
+        const rawName = it?.firstName ?? it?.fullName ?? it?.name ?? it?.user_name ?? it?.username ?? it?.user ?? it?.userId;
+        const name = pickFirstName(rawName) || `User ${idx + 1}`;
         return { name, steps };
       });
       setJourneysData(normalized);
@@ -2971,7 +3000,7 @@ export default function ReportsPage() {
                                           const steps = Array.isArray(j?.steps) ? j.steps : [];
                                           const data = steps.map((s: any, i: number) => [i + 1, String(s?.screen_name || s?.screen || '')]);
                                           return {
-                                            name: `User ${idx + 1}`,
+                                            name: String(j?.name || `User ${idx + 1}`),
                                             type: 'line',
                                             data,
                                             smooth: 0.15,
