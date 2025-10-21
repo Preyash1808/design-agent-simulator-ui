@@ -2450,27 +2450,41 @@ export default function ReportsPage() {
                           <h4>Sentiment Drift</h4>
                           <ReactECharts style={{ height: 360 }} option={(function(){
                             // Sort emotions from negative (bottom) to positive (top)
-                            // 10 fixed buckets equally spanning negative→positive (canonical scale)
-                            const CANON = ['rage','anger','sadness','fear','surprise','neutral','calm','content','joy','delight'];
-                            // Polarity scores (negative→positive)
+                            // 10 product-appropriate buckets equally spanning negative→positive
+                            const CANON = ['frustrated','annoyed','confused','anxious','overwhelmed','neutral','focused','satisfied','confident','delighted'];
+                            // Polarity scores (negative→positive) used to assign unknown labels
                             const scoreMap: Record<string, number> = {
-                              'rage': -5, 'anger': -4, 'frustration': -4, 'sadness': -3, 'disgust': -3,
-                              'fear': -2, 'surprise': -1, 'neutral': 0, 'calm': 1, 'content': 2,
-                              'joy': 3, 'excitement': 4, 'delight': 5,
-                              // Optional mappings for observed labels
-                              'overwhelmed': -2, 'concerned': -2, 'cautious': -1, 'anticipation': 1,
+                              'frustrated': -5,
+                              'annoyed': -4,
+                              'confused': -3,
+                              'anxious': -2,
+                              'overwhelmed': -1,
+                              'neutral': 0,
+                              'focused': 1,
+                              'satisfied': 2,
+                              'confident': 3,
+                              'delighted': 4,
+                              // Likely synonyms encountered from LLMs/backends
+                              'rage': -5, 'angry': -4, 'anger': -4, 'irritated': -4, 'mad': -4,
+                              'sad': -3, 'sadness': -3, 'disappointed': -3, 'down': -3, 'melancholy': -3,
+                              'fear': -2, 'apprehensive': -2, 'worried': -2, 'concerned': -2,
+                              'surprise': -1, 'curious': -1, // treat as uncertain/novelty → close to confused
+                              'calm': 1, 'relaxed': 1,
+                              'content': 2, 'optimistic': 2, 'satisfaction': 2,
+                              'joy': 3, 'happiness': 3, 'excited': 3, 'excitement': 3,
+                              'ecstatic': 4, 'delight': 4, 'delighted': 4,
                             };
-                            // Synonym/alias mapping from observed → canonical bucket (a few common ones)
+                            // Synonym/alias mapping from observed → canonical bucket
                             const aliasMap: Record<string, string> = {
-                              'frustration': 'anger', 'frustrated': 'anger', 'irritated': 'anger',
-                              'disappointed': 'sadness', 'melancholy': 'sadness',
-                              'terrified': 'fear', 'anxious': 'fear', 'apprehensive': 'fear',
-                              'curious': 'surprise',
-                              'optimistic': 'content', 'satisfied': 'content',
-                              'joyful': 'joy', 'happiness': 'joy',
-                              'ecstatic': 'delight', 'delighted': 'delight',
-                              'overwhelmed': 'fear', 'concerned': 'fear', 'cautious': 'fear', 'anticipation': 'content',
-                              'disgust': 'sadness', 'excitement': 'joy',
+                              // map extreme negatives to gentler product terms
+                              'rage': 'frustrated', 'angry': 'annoyed', 'anger': 'annoyed', 'irritated': 'annoyed', 'mad': 'annoyed',
+                              'sad': 'frustrated', 'sadness': 'frustrated', 'disappointed': 'frustrated', 'down': 'frustrated', 'melancholy': 'frustrated',
+                              'fear': 'anxious', 'terrified': 'anxious', 'apprehensive': 'anxious', 'worried': 'anxious', 'concerned': 'anxious',
+                              'surprise': 'confused', 'curious': 'confused',
+                              'calm': 'focused', 'relaxed': 'focused',
+                              'content': 'satisfied', 'optimistic': 'satisfied', 'satisfaction': 'satisfied',
+                              'joy': 'confident', 'happiness': 'confident', 'excited': 'confident', 'excitement': 'confident',
+                              'ecstatic': 'delighted', 'delight': 'delighted', 'delighted': 'delighted',
                             };
                             const states = CANON.slice(); // clamp to the 10 canonical buckets only
                             const indexMap = new Map(states.map((e, i) => [e, i]));
