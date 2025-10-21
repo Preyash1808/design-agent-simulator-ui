@@ -2,8 +2,8 @@ export const fetchCache = 'force-no-store';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  // Prefer explicit API base if provided; otherwise rely on Next rewrites (relative fetch)
-  const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || process.env.BACKEND_URL || '';
+  // Prefer explicit API base if provided; otherwise default to local backend
+  const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || process.env.BACKEND_URL || 'http://localhost:8000';
   const { searchParams } = new URL(req.url);
   const runId = searchParams.get('runId') || '';
   const personaId = searchParams.get('personaId') || '';
@@ -15,20 +15,35 @@ export async function GET(req: Request) {
 
   // If a format is requested via GET (e.g., link click), proxy the file download
   if (format === 'xlsx' || format === 'csv') {
+    const headers = { ...(auth ? { Authorization: auth } : {}) } as any;
     try {
-      const url = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.csv?format=${encodeURIComponent(format)}`;
-      const r = await fetch(url, {
-        headers: { ...(auth ? { Authorization: auth } : {}) },
-        cache: 'no-store',
-      });
+      let tried: string[] = [];
+      let r: Response | null = null;
+      if (format === 'xlsx') {
+        // Try direct XLSX route first
+        const url1 = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.xlsx`;
+        tried.push(url1);
+        r = await fetch(url1, { headers, cache: 'no-store' });
+        if (!r.ok) {
+          // Fallback to CSV route with format=xlsx (older backend style)
+          const url2 = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.csv?format=xlsx`;
+          tried.push(url2);
+          r = await fetch(url2, { headers, cache: 'no-store' });
+        }
+      } else {
+        const urlCsv = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.csv`;
+        tried.push(urlCsv);
+        r = await fetch(urlCsv, { headers, cache: 'no-store' });
+      }
+      if (!r) return new Response('download failed', { status: 500, headers: { 'x-proxy-tried': tried.join(' ') } });
       const buf = await r.arrayBuffer();
       const ct = r.headers.get('content-type') || (format === 'xlsx'
         ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         : 'text/csv; charset=utf-8');
       const cd = r.headers.get('content-disposition') || `attachment; filename="users_${runId}_${personaId}.${format}"`;
-      return new Response(buf, { status: r.status, headers: { 'Content-Type': ct, 'Content-Disposition': cd, 'Cache-Control': 'no-store' } });
-    } catch {
-      return new Response('download failed', { status: 500 });
+      return new Response(buf, { status: r.status, headers: { 'Content-Type': ct, 'Content-Disposition': cd, 'Cache-Control': 'no-store', 'x-proxy-tried': tried.join(' ') } });
+    } catch (e: any) {
+      return new Response('download failed', { status: 500, headers: { 'x-proxy-error': String(e) } });
     }
   }
   const r = await fetch(`${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}`, {
@@ -97,7 +112,7 @@ export async function GET(req: Request) {
 
 // Proxy CSV download of persona users
 export async function POST(req: Request) {
-  const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || '';
+  const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || 'http://localhost:8000';
   const { searchParams } = new URL(req.url);
   const runId = searchParams.get('runId') || '';
   const personaId = searchParams.get('personaId') || '';
@@ -106,15 +121,26 @@ export async function POST(req: Request) {
   if (!api || !runId || !personaId) return new Response('missing api or runId/personaId', { status: 400 });
   let auth = (typeof Headers !== 'undefined' ? new Headers(req.headers as any).get('authorization') : null) || '';
   if (!auth && tokenParam) auth = `Bearer ${tokenParam}`;
-  if (!auth && tokenParam) auth = `Bearer ${tokenParam}`;
-  const url = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.csv${format ? `?format=${encodeURIComponent(format)}` : ''}`;
-  const r = await fetch(url, {
-    headers: { ...(auth ? { Authorization: auth } : {}) },
-    cache: 'no-store',
-  });
+  const tried: string[] = [];
+  let r: Response | null = null;
+  if (format === 'xlsx') {
+    const url1 = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.xlsx`;
+    tried.push(url1);
+    r = await fetch(url1, { headers: { ...(auth ? { Authorization: auth } : {}) }, cache: 'no-store' });
+    if (!r.ok) {
+      const url2 = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.csv?format=xlsx`;
+      tried.push(url2);
+      r = await fetch(url2, { headers: { ...(auth ? { Authorization: auth } : {}) }, cache: 'no-store' });
+    }
+  } else {
+    const urlCsv = `${api}/runs/${encodeURIComponent(runId)}/persona/${encodeURIComponent(personaId)}/users.csv`;
+    tried.push(urlCsv);
+    r = await fetch(urlCsv, { headers: { ...(auth ? { Authorization: auth } : {}) }, cache: 'no-store' });
+  }
+  if (!r) return new Response('download failed', { status: 500, headers: { 'x-proxy-tried': tried.join(' ') } });
   const buf = await r.arrayBuffer();
   const ct = r.headers.get('content-type') || (format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv; charset=utf-8');
   const cd = r.headers.get('content-disposition') || `attachment; filename="users_${runId}_${personaId}.${format === 'xlsx' ? 'xlsx' : 'csv'}"`;
-  return new Response(buf, { status: r.status, headers: { 'Content-Type': ct, 'Content-Disposition': cd, 'Cache-Control': 'no-store' } });
+  return new Response(buf, { status: r.status, headers: { 'Content-Type': ct, 'Content-Disposition': cd, 'Cache-Control': 'no-store', 'x-proxy-tried': tried.join(' ') } });
 }
 

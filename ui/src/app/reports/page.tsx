@@ -2318,18 +2318,24 @@ export default function ReportsPage() {
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <button
                           title="Download Excel"
-                          onClick={() => {
+                          onClick={async () => {
                             try {
                               const runId = String(runQuery || lastRequested || '').trim();
                               if (!runId || !openPersonaId) return;
                               const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+                              const qs = new URLSearchParams({ runId, personaId: String(openPersonaId), format: 'xlsx' }).toString();
+                              const resp = await fetch(`/api/persona_detail?${qs}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+                              if (!resp.ok) { console.error('Download failed with status', resp.status); return; }
+                              const buf = await resp.arrayBuffer();
+                              const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                              const url = URL.createObjectURL(blob);
                               const a = document.createElement('a');
-                              const qs = new URLSearchParams({ runId, personaId: String(openPersonaId), format: 'xlsx', ...(token ? { token } : {}) }).toString();
-                              a.href = `/api/persona_detail?${qs}`;
-                              a.download = '';
+                              a.href = url;
+                              a.download = `users_${runId}_${String(openPersonaId)}.xlsx`;
                               document.body.appendChild(a);
                               a.click();
                               a.remove();
+                              URL.revokeObjectURL(url);
                             } catch {}
                           }}
                           className="btn-ghost btn-sm"
@@ -2483,8 +2489,8 @@ export default function ReportsPage() {
                               return best;
                             }
                             const map = new Map<string, number>(states.map((s,i)=>[s,i]));
-                            // Add an extra line break for more vertical spacing between category labels
-                            const paddedStates = states.map(s => `${s}\n`);
+                            // Add an extra line break and capitalize first letter for display
+                            const paddedStates = states.map(s => `${(s.charAt(0).toUpperCase() + s.slice(1))}\n`);
                             const maxStep = Math.max(10, ...personaEmoSeries.flatMap(s=>s.points.map(p=>p.step)));
                             const series = personaEmoSeries.map((s, idx) => ({
                               name: s.name,
@@ -2504,7 +2510,7 @@ export default function ReportsPage() {
                               yAxis: { type: 'category', data: paddedStates, axisLabel: { color: '#1e293b', fontWeight: 600, lineHeight: 20, margin: 12 }, name: 'Emotional State', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#94a3b8', padding: [0, 0, 6, 0], fontSize: 12, align: 'left' } },
                               legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' } },
                               dataZoom: [ { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: 'shift', moveOnMouseMove: 'shift', moveOnMouseWheel: false, preventDefaultMouseMove: false }, { type: 'slider', xAxisIndex: 0, start: 0, end: 30, height: 16, bottom: 6 } ],
-                              tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const yi=p?.data?.[1]; const sent=p?.data?.[2]; const screen=p?.data?.[3]||''; const observed=p?.data?.[4]||''; const plotted=states[yi]||''; const sentimentTxt=(typeof sent==='number'?(sent>=0?`+${sent.toFixed(2)}`:sent.toFixed(2)):'-'); return `${p.seriesName} · Step ${step}${screen?` · ${screen}`:''}<br/>Observed: ${observed} (sentiment ${sentimentTxt})<br/>Plotted as: ${plotted}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
+                              tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const yi=p?.data?.[1]; const sent=p?.data?.[2]; const screen=p?.data?.[3]||''; const observedRaw=p?.data?.[4]||''; const plottedRaw=states[yi]||''; const cap=(s:string)=> s ? (s.charAt(0).toUpperCase()+s.slice(1)) : s; const observed=cap(String(observedRaw)); const plotted=cap(String(plottedRaw)); const sentimentTxt=(typeof sent==='number'?(sent>=0?`+${sent.toFixed(2)}`:sent.toFixed(2)):'-'); return `${p.seriesName} · Step ${step}${screen?` · ${screen}`:''}<br/>Observed: ${observed} (sentiment ${sentimentTxt})<br/>Plotted as: ${plotted}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
                               series,
                             } as any;
                           })()} />
