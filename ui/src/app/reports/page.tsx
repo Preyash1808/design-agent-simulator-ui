@@ -2450,9 +2450,9 @@ export default function ReportsPage() {
                         <div id="sentiment-drift" className="tile" style={{ marginTop: 12 }}>
                           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                             <h4 style={{ margin: 0 }}>Sentiment Drift</h4>
-                            <label style={{ display:'inline-flex', alignItems:'center', gap: 8, fontSize: 14, color:'#0f172a' }}>
-                              <div onClick={()=>setAggregateEmotions(v=>!v)} style={{ position:'relative', width: 48, height: 26, borderRadius: 999, cursor:'pointer', background: aggregateEmotions ? '#111827' : '#e5e7eb', border: '1px solid #cbd5e1' }}>
-                                <div style={{ position:'absolute', top: 2, left: aggregateEmotions ? 24 : 2, width: 22, height: 22, borderRadius: 999, background: aggregateEmotions ? '#4f46e5' : '#6366f1', transition: 'left .15s ease' }} />
+                            <label style={{ display:'inline-flex', alignItems:'center', gap: 4, fontSize: 11, color:'#0f172a' }}>
+                              <div onClick={()=>setAggregateEmotions(v=>!v)} style={{ position:'relative', width: 28, height: 16, borderRadius: 999, cursor:'pointer', background: aggregateEmotions ? '#111827' : '#e5e7eb', border: '1px solid #cbd5e1' }}>
+                                <div style={{ position:'absolute', top: 2, left: aggregateEmotions ? 14 : 2, width: 12, height: 12, borderRadius: 999, background: aggregateEmotions ? '#4f46e5' : '#6366f1', transition: 'left .15s ease' }} />
                               </div>
                               <span>{aggregateEmotions ? 'ON' : 'OFF'}</span>
                             </label>
@@ -2481,7 +2481,7 @@ export default function ReportsPage() {
                               'calm': 1, 'relaxed': 1,
                               'content': 2, 'optimistic': 2, 'satisfaction': 2,
                               'joy': 3, 'happiness': 3, 'excited': 3, 'excitement': 3,
-                              'ecstatic': 4, 'delight': 4, 'delighted': 4,
+                              'ecstatic': 4, 'delight': 4,
                             };
                             // Synonym/alias mapping from observed → canonical bucket
                             const aliasMap: Record<string, string> = {
@@ -2493,7 +2493,7 @@ export default function ReportsPage() {
                               'calm': 'focused', 'relaxed': 'focused',
                               'content': 'satisfied', 'optimistic': 'satisfied', 'satisfaction': 'satisfied',
                               'joy': 'confident', 'happiness': 'confident', 'excited': 'confident', 'excitement': 'confident',
-                              'ecstatic': 'delighted', 'delight': 'delighted', 'delighted': 'delighted',
+                              'ecstatic': 'delighted', 'delight': 'delighted',
                             };
                             const states = CANON.slice(); // clamp to the 10 canonical buckets only
                             const indexMap = new Map(states.map((e, i) => [e, i]));
