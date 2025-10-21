@@ -2509,7 +2509,7 @@ export default function ReportsPage() {
                         </button>
                       </nav>
 
-                      <div className="persona-modal-content">
+                      <div className="persona-modal-content" style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
                         {personaDetailLoading && <div className="muted">Loading…</div>}
                         {(!personaDetailLoading && !personaDetail) && <div className="muted">No detail</div>}
                         {personaDetail && (
@@ -2553,7 +2553,7 @@ export default function ReportsPage() {
                               <div onClick={()=>setAggregateEmotions(v=>!v)} style={{ position:'relative', width: 28, height: 16, borderRadius: 999, cursor:'pointer', background: aggregateEmotions ? '#111827' : '#e5e7eb', border: '1px solid #cbd5e1' }}>
                                 <div style={{ position:'absolute', top: 2, left: aggregateEmotions ? 14 : 2, width: 12, height: 12, borderRadius: 999, background: aggregateEmotions ? '#4f46e5' : '#6366f1', transition: 'left .15s ease' }} />
                               </div>
-                              <span>{aggregateEmotions ? 'ON' : 'OFF'}</span>
+                              <span>{aggregateEmotions ? 'PERSONA' : 'USERS'}</span>
                             </label>
                           </div>
                           <ReactECharts key={aggregateEmotions ? 'emo-agg' : 'emo-users'} notMerge style={{ height: 360 }} option={(function(){
@@ -2625,6 +2625,12 @@ export default function ReportsPage() {
                                 symbolSize: 5,
                                 lineStyle: { width: 2, color: getUserColor(idx, Math.max(1, personaEmoSeries.length)) },
                                 itemStyle: { color: getUserColor(idx, Math.max(1, personaEmoSeries.length)) },
+                                animation: true,
+                                animationEasing: 'linear',
+                                animationDuration: 400,
+                                animationDelay: (i: number) => i * 24,
+                                animationDurationUpdate: 300,
+                                animationDelayUpdate: (i: number) => i * 18,
                                 data: (s.points ?? []).map(p=>{ const observed = String(p?.state || ''); const bucket = bucketFor(observed); const yi = Number(indexMap.get(bucket) ?? -1); const stepVal = Number(p?.step ?? 0); const sentVal = Number(p?.sentiment ?? 0); const screenVal = String(p?.screen ?? ''); return [stepVal, yi, sentVal, screenVal, observed]; }).filter((d:any)=> Number(d[1]) >= 0),
                               }));
                             } else {
@@ -2673,9 +2679,15 @@ export default function ReportsPage() {
                                 symbol: 'none',
                                 lineStyle: { width: 1, color: getUserColor(idx, Math.max(1, personaEmoSeries.length)), opacity: 0.35 },
                                 itemStyle: { color: getUserColor(idx, Math.max(1, personaEmoSeries.length)), opacity: 0.35 },
+                                animation: true,
+                                animationEasing: 'linear',
+                                animationDuration: 400,
+                                animationDelay: (i: number) => i * 24,
+                                animationDurationUpdate: 300,
+                                animationDelayUpdate: (i: number) => i * 18,
                                 emphasis: { focus: 'series' },
                                 data: (s.points ?? []).map(p=>{ const observed = String(p?.state || ''); const bucket = bucketFor(observed); const yi = Number(indexMap.get(bucket) ?? -1); const stepVal = Number(p?.step ?? 0); const sentVal = Number(p?.sentiment ?? 0); const screenVal = String(p?.screen ?? ''); return [stepVal, yi, sentVal, screenVal, observed]; }).filter((d:any)=> Number(d[1]) >= 0),
-                              }));
+                               }));
                               // Legend: persona first, then users
                               series = [personaSeries, ...userSeries];
                             }
@@ -2982,13 +2994,13 @@ export default function ReportsPage() {
                                           yAxis: { type: 'category', name: 'Screen Name', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#1e293b', fontWeight: 800, fontSize: 14, align: 'left' }, axisLabel: { color: '#334155', fontSize: 11, fontWeight: 500, lineHeight: 15, hideOverlap: false, interval: 0, formatter: (v: string) => v.length > 20 ? v.substring(0, 18) + '...' : v, margin: 8 }, axisTick: { show: true, alignWithLabel: true, lineStyle: { color: '#cbd5e1' } }, axisLine: { lineStyle: { color: '#cbd5e1', width: 1 } }, boundaryGap: true, data: screenList },
                                           dataZoom: [
                                             // Inside zoom: mouse wheel + trackpad pinch/drag for smooth navigation
-                                            { 
-                                              type: 'inside', 
-                                              xAxisIndex: 0, 
+                                            {
+                                              type: 'inside',
+                                              xAxisIndex: 0,
                                               filterMode: 'none',
                                               zoomOnMouseWheel: 'shift',  // Only zoom when holding Shift
-                                              moveOnMouseMove: 'shift',   // Only pan when holding Shift and dragging
-                                              moveOnMouseWheel: false,    // Do not intercept normal page scroll
+                                              moveOnMouseMove: false,      // Never capture drag; use slider instead
+                                              moveOnMouseWheel: false,     // Do not intercept normal page scroll
                                               preventDefaultMouseMove: false
                                             },
                                             // Slider zoom: mini-map overview bar at bottom for discrete navigation
