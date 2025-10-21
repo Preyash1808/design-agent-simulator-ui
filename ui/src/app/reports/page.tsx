@@ -2494,7 +2494,7 @@ export default function ReportsPage() {
                                 symbol: 'circle',
                               symbolSize: 5,
                               lineStyle: { width: 2 },
-                              data: s.points.map(p=>{ const bucket = bucketFor(p.state); const yi = indexMap.get(bucket) ?? -1; return [p.step, yi, p.sentiment, p.screen, p.state]; }).filter(d=>d[1] >= 0),
+                              data: (s.points ?? []).map(p=>{ const observed = String(p?.state || ''); const bucket = bucketFor(observed); const yi = Number(indexMap.get(bucket) ?? -1); const stepVal = Number(p?.step ?? 0); const sentVal = Number(p?.sentiment ?? 0); const screenVal = String(p?.screen ?? ''); return [stepVal, yi, sentVal, screenVal, observed]; }).filter((d:any)=> Number(d[1]) >= 0),
                             }));
                             if (!series.length) return { graphic: [{ type:'text', left:'center', top:'middle', style:{ text:'No emotion timeline available', fill:'#94a3b8', fontSize: 14 } }] } as any;
                             return {
