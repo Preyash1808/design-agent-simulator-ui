@@ -479,8 +479,9 @@ export default function ReportsPage() {
           const journeys: any[] = Array.isArray(ej?.emotion_journeys) ? ej.emotion_journeys : [];
           const series: Array<{ name: string; points: Array<{ step: number; state: string; sentiment: number }> }> = [];
           const states = new Set<string>();
-          for (const j of journeys) {
-            const name = String(j?.userId || j?.user_id || 'user');
+          for (let ji = 0; ji < journeys.length; ji++) {
+            const j = journeys[ji];
+            const name = `User ${ji + 1}`;
             const ptsRaw: any[] = Array.isArray(j?.emotions) ? j.emotions : [];
             const points: Array<{ step: number; state: string; sentiment: number }> = [];
             for (const p of ptsRaw) {
@@ -534,7 +535,8 @@ export default function ReportsPage() {
           ? it.steps
           : (Array.isArray(it?.sequence) ? it.sequence : (typeof it?.path === 'string' ? String(it.path).split('>').map((s: string) => ({ screen_name: s.trim() })) : []));
         const steps = (stepsRaw || []).map((s: any) => ({ screen_name: String(s?.screen_name || s?.screen || s?.frame_name || '') }));
-        const name = String(it?.user?.name || it?.name || it?.user_id || `User ${idx + 1}`);
+        // Force display name to 'User N' regardless of backend-provided name
+        const name = `User ${idx + 1}`;
         return { name, steps };
       });
       setJourneysData(normalized);
@@ -2369,9 +2371,9 @@ export default function ReportsPage() {
                         </button>
                         {personaModalTab === 'path' && (
                           <div className="persona-modal-nav-subitems">
-                            <a href="#flow-insights" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('flow-insights'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});}}>Flow Insights</a>
-                            <a href="#backtracks" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('backtracks'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});}}>Backtracks</a>
-                            <a href="#exits" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('exits'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});}}>Exits</a>
+                            <a href="#flow-insights" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('flow-insights'); if(el){ const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior:'smooth' }); }}}>Flow Insights</a>
+                            <a href="#path-backtracks" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('path-backtracks'); if(el){ const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior:'smooth' }); }}}>Backtracks</a>
+                            <a href="#exits" className="persona-modal-nav-subitem" onClick={(e)=>{e.preventDefault(); const el=document.getElementById('exits'); if(el){ const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior:'smooth' }); }}}>Exits</a>
                           </div>
                         )}
 
@@ -2424,17 +2426,19 @@ export default function ReportsPage() {
                         {/* Sentiment drift from emotions API (x: step, y: emotional state) */}
                         <div id="sentiment-drift" className="tile" style={{ marginTop: 12 }}>
                           <h4>Sentiment Drift</h4>
-                          <ReactECharts style={{ height: 260 }} option={(function(){
+                          <ReactECharts style={{ height: 360 }} option={(function(){
                             const DEFAULT_STATES = ['rage','anger','frustration','sadness','disgust','fear','surprise','neutral','calm','content','joy','excitement','delight'];
                             const states = Array.from(new Set([ ...DEFAULT_STATES, ...personaEmoStates ]));
                             const map = new Map<string, number>(states.map((s,i)=>[s,i]));
+                            // Add an extra line break for more vertical spacing between category labels
+                            const paddedStates = states.map(s => `${s}\n`);
                             const maxStep = Math.max(10, ...personaEmoSeries.flatMap(s=>s.points.map(p=>p.step)));
                             const series = personaEmoSeries.map((s, idx) => ({
                               name: s.name,
-                              type: 'line',
+                                type: 'line', 
                               smooth: 0.25,
                               showSymbol: true,
-                              symbol: 'circle',
+                                symbol: 'circle',
                               symbolSize: 5,
                               lineStyle: { width: 2 },
                               data: s.points.map(p=>[p.step, map.get(p.state) ?? states.indexOf(p.state), p.sentiment]).filter(d=>d[1] >= 0),
@@ -2442,9 +2446,9 @@ export default function ReportsPage() {
                             if (!series.length) return { graphic: [{ type:'text', left:'center', top:'middle', style:{ text:'No emotion timeline available', fill:'#94a3b8', fontSize: 14 } }] } as any;
                             return {
                               backgroundColor: 'transparent',
-                              grid: { left: 70, right: 20, top: 20, bottom: 40, containLabel: true },
+                              grid: { left: 70, right: 20, top: 28, bottom: 40, containLabel: true },
                               xAxis: { type: 'value', min: 1, max: maxStep, axisLabel: { color: '#cbd5e1' }, name: 'Step', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8' } },
-                              yAxis: { type: 'category', data: states, axisLabel: { color: '#cbd5e1' }, name: 'Emotional State', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#94a3b8', padding: [0, 0, 6, 0], fontSize: 12, align: 'left' } },
+                              yAxis: { type: 'category', data: paddedStates, axisLabel: { color: '#1e293b', fontWeight: 600, lineHeight: 20, margin: 12 }, name: 'Emotional State', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#94a3b8', padding: [0, 0, 6, 0], fontSize: 12, align: 'left' } },
                               legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' } },
                               dataZoom: [ { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: 'shift' }, { type: 'slider', xAxisIndex: 0, start: 0, end: 30, height: 16, bottom: 6 } ],
                               tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const sIdx=p?.data?.[1]; const sent=p?.data?.[2]; const state=states[sIdx]||''; return `${p.seriesName}<br/>Step ${step}: ${state}<br/>Sentiment: ${typeof sent==='number'?sent.toFixed(2):'-'}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
@@ -2456,7 +2460,7 @@ export default function ReportsPage() {
                         {/* Flow Insights removed per request */}
 
                         {/* Exits */}
-                        <div id="exits" className="tile" style={{ marginTop: 12 }}>
+                        <div id="exits" className="tile" style={{ marginTop: 12, display:'none' }}>
                           <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between' }}>
                             <h4 style={{ margin: 0 }}>Drop‑off Reasons</h4>
                           </div>
@@ -2518,8 +2522,8 @@ export default function ReportsPage() {
                           })()}
                         </div>
 
-                        {/* Backtracks by screen */}
-                        <div id="backtracks" className="tile" style={{ marginTop: 12 }}>
+                        {/* Backtracks by screen (hide in Emotion; rendered in Path tab) */}
+                        <div id="backtracks" className="tile" style={{ marginTop: 12, display: 'none' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h4 style={{ margin: 0 }}>Backtracks by Screen</h4>
                             {selectedBacktrack && (
@@ -2560,43 +2564,59 @@ export default function ReportsPage() {
                               return lines.slice(0, 3).join('\n');
                             };
                             const total = vals.reduce((sum, val) => sum + val, 0);
+                            // Lollipop (horizontal) chart: stems left->right with circular heads at value end
+                            const maxLabelLen = labelsFull.reduce((m, s) => Math.max(m, String(s || '').length), 0);
+                            const estWidth = Math.min(320, Math.max(180, Math.round(maxLabelLen * 7)));
                             return {
                               backgroundColor: 'transparent',
-                              grid: { left: 50, right: 20, top: 30, bottom: 120 },
+                              grid: { left: estWidth + 30, right: 30, top: 30, bottom: 50 },
                               xAxis: { 
-                                type:'category',
-                                data: labelsFull,
-                                axisLabel:{ color:'#cbd5e1', interval: 0, rotate: 0 as any, formatter: wrapLabel, lineHeight: 16 as any, margin: 12 as any },
-                                name: 'Screen Name',
+                                type: 'value',
+                                axisLabel: { color: '#334155', fontWeight: 600 },
+                                axisLine: { lineStyle: { color: '#94a3b8' } },
+                                splitLine: { show: true, lineStyle: { color: 'rgba(148,163,184,0.25)' } },
+                                name: 'Backtracks',
                                 nameLocation: 'middle', 
-                                nameGap: 60,
+                                nameGap: 28,
                                 nameTextStyle: { color: '#94a3b8', fontSize: 12 },
-                                triggerEvent: true,
                               },
-                              yAxis:{ 
-                                type:'value', 
-                                name: 'Number of Backtracks', 
-                                nameLocation: 'middle',
-                                nameGap: 40,
-                                nameTextStyle: { color: '#94a3b8', fontSize: 12 },
-                                axisLabel:{ color:'#cbd5e1' } 
+                              yAxis: {
+                                type: 'category',
+                                data: labelsFull,
+                                axisLabel: { color: '#334155', fontSize: 12, fontWeight: 600, interval: 0 as any, width: estWidth as any, overflow: 'break' as any, lineHeight: 16 as any, margin: 12 as any },
+                                axisLine: { lineStyle: { color: '#94a3b8' } },
+                                axisTick: { show: false },
                               },
-                              series:[{ 
-                                type:'bar', 
-                                data: vals, 
-                                itemStyle:{ color:'#34d399', borderRadius:[4,4,0,0] } 
-                              }],
-                              tooltip:{ 
-                                trigger:'item', 
-                                formatter:(p:any)=> {
+                              tooltip: {
+                                trigger: 'item',
+                                formatter: (p: any) => {
                                   const idx = p.dataIndex;
                                   const count = vals[idx];
                                   const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : '0';
                                   const fullName = labelsFull[idx];
-                                  return `${fullName}: ${count} backtracks (${percentage}%)`;
+                                  return `${fullName}: ${count} backtrack${count===1?'':'s'} (${percentage}%)`;
                                 }
-                              }
-                            };
+                              },
+                              series: [
+                                { // stem
+                                  type: 'bar',
+                                  data: vals,
+                                  barWidth: 6,
+                                  itemStyle: { color: '#93a8e8' },
+                                  z: 1,
+                                  label: { show: true, position: 'right', color: '#0f172a', fontWeight: 700, formatter: (p: any) => String(p.value) }
+                                },
+                                { // circle head
+                                  type: 'pictorialBar',
+                                  data: vals,
+                                  symbol: 'circle',
+                                  symbolSize: 16,
+                                  symbolPosition: 'end',
+                                  itemStyle: { color: '#7ea0e6', borderColor: '#6b8ad6', borderWidth: 1 },
+                                  z: 2
+                                }
+                              ]
+                            } as any;
                               })()}
                               onEvents={{
                                 click: (p: any) => {
@@ -2674,7 +2694,7 @@ export default function ReportsPage() {
                             {personaModalTab === 'path' && (
                               <>
                                 {/* Flow insights content here */}
-                                <div className="tile" ref={flowInsightsContainerRef}>
+                                <div className="tile" ref={flowInsightsContainerRef} id="flow-insights">
                                   <h4>Flow Insights</h4>
                                   <ReactECharts 
                                     onChartReady={(i:any)=>setChartRef(flowInsightsRef, { getEchartsInstance: ()=>i })}
@@ -2703,7 +2723,7 @@ export default function ReportsPage() {
                                           const steps = Array.isArray(j?.steps) ? j.steps : [];
                                           const data = steps.map((s: any, i: number) => [i + 1, String(s?.screen_name || s?.screen || '')]);
                                           return {
-                                            name: String(j?.name || `User ${idx + 1}`),
+                                            name: `User ${idx + 1}`,
                                             type: 'line',
                                             data,
                                             smooth: 0.15,
@@ -2889,6 +2909,46 @@ export default function ReportsPage() {
                                         },
                                         series: series
                                       };
+                                    })()}
+                                  />
+                                </div>
+
+                                {/* Backtracks lollipop chart in Path tab */}
+                                <div id="path-backtracks" className="tile" style={{ marginTop: 12 }}>
+                                  <h4 style={{ margin: 0 }}>Backtracks by Screen</h4>
+                                  <ReactECharts
+                                    style={{ height: 260 }}
+                                    option={(function(){
+                                      const items: Array<{screen:string; count:number}> = personaDetail?.backtracks_by_screen || [];
+                                      if (!items || items.length === 0) {
+                                        return { grid:{}, xAxis:{show:false}, yAxis:{show:false}, series:[] } as any;
+                                      }
+                                      const files: Array<{id:number; name:string; image?:string}> = (personaDetail?.screen_files || []) as any;
+                                      const toFriendly = (s: string): string => {
+                                        const raw = String(s || '');
+                                        if (/^\d+$/.test(raw)) {
+                                          const id = Number(raw);
+                                          const f = files.find(ff => Number(ff?.id) === id);
+                                          return f?.name ? String(f.name) : raw;
+                                        }
+                                        return raw;
+                                      };
+                                      const labelsFull = items.map(i=>toFriendly(i.screen));
+                                      const vals = items.map(i=>Number(i.count||0));
+                                      const total = vals.reduce((s,v)=>s+v,0);
+                                      const maxLabelLen = labelsFull.reduce((m, s) => Math.max(m, String(s || '').length), 0);
+                                      const estWidth = Math.min(320, Math.max(180, Math.round(maxLabelLen * 7)));
+                                      return {
+                                        backgroundColor:'transparent',
+                                        grid:{ left: estWidth + 30, right: 30, top: 20, bottom: 40 },
+                                        xAxis:{ type:'value', axisLabel:{ color:'#334155', fontWeight:600 }, axisLine:{ lineStyle:{ color:'#94a3b8' } }, splitLine:{ show:true, lineStyle:{ color:'rgba(148,163,184,0.25)' } }, name:'Backtracks', nameLocation:'middle', nameGap:26, nameTextStyle:{ color:'#94a3b8', fontSize:12 } },
+                                        yAxis:{ type:'category', data: labelsFull, axisLabel:{ color:'#334155', fontWeight:600, interval:0 as any, width: estWidth as any, overflow:'break' as any, lineHeight:16 as any, margin:12 as any }, axisLine:{ lineStyle:{ color:'#94a3b8' } }, axisTick:{ show:false } },
+                                        tooltip:{ trigger:'item', formatter:(p:any)=>{ const idx=p.dataIndex; const count=vals[idx]; const pct= total?((count/total)*100).toFixed(1):'0'; const name=labelsFull[idx]; return `${name}: ${count} backtrack${count===1?'':'s'} (${pct}%)`; } },
+                                        series:[
+                                          { type:'bar', data: vals, barWidth:6, itemStyle:{ color:'#93a8e8' }, z:1, label:{ show:true, position:'right', color:'#0f172a', fontWeight:700, formatter:(p:any)=>String(p.value) } },
+                                          { type:'pictorialBar', data: vals, symbol:'circle', symbolSize:16, symbolPosition:'end', itemStyle:{ color:'#7ea0e6', borderColor:'#6b8ad6', borderWidth:1 }, z:2 }
+                                        ]
+                                      } as any;
                                     })()}
                                   />
                                 </div>
