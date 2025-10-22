@@ -48,6 +48,8 @@ export default function CreateRunUnifiedPage() {
   ]);
   const [expandedTaskId, setExpandedTaskId] = useState<string>(tasks[0]?.id || '');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [preprocessStartedAtMs, setPreprocessStartedAtMs] = useState<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState<number>(0);
   const [activeRunStatus, setActiveRunStatus] = useState<string | null>(null);
   const [activeRunLog, setActiveRunLog] = useState<string | null>(null);
   const [activeTaskName, setActiveTaskName] = useState<string>('');
@@ -56,7 +58,6 @@ export default function CreateRunUnifiedPage() {
   const [runStartMs, setRunStartMs] = useState<number | null>(null);
   const [recent, setRecent] = useState<any | null>(null);
   const [loadingRecent, setLoadingRecent] = useState(false);
-  const [elapsedSec, setElapsedSec] = useState(0);
   const [pageSeconds, setPageSeconds] = useState(0);
   const [bootLoading, setBootLoading] = useState(true);
   const [completedProjectIds, setCompletedProjectIds] = useState<string[]>([]);
@@ -325,6 +326,7 @@ export default function CreateRunUnifiedPage() {
         const data = await r.json();
         if (!r.ok) throw new Error(data?.detail || data?.error || 'preprocess failed');
         setPreprocessInfo(data);
+        setPreprocessStartedAtMs(Date.now());
         setStep('preprocess');
       }
     } catch (err:any) {
@@ -1121,8 +1123,9 @@ export default function CreateRunUnifiedPage() {
     );
   }
 
-  // Show empty state only when: no projects AND user hasn't started the flow
-  const showEmptyState = !hasAnyProjects && !bootLoading && step === 'choose' && !useExisting && !projectName && !figmaUrl && !page;
+  // Never show empty state - the create-run page already handles that.
+  // Users coming to /configure-test should always see the form.
+  const showEmptyState = false;
 
   return (
     <div>
