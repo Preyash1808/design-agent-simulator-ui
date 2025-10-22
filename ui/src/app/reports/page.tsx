@@ -192,6 +192,8 @@ export default function ReportsPage() {
   // Per-user journeys (step-by-step screen sequences)
   const [journeysData, setJourneysData] = useState<any[]>([]);
   const [journeysLoading, setJourneysLoading] = useState<boolean>(false);
+  // Custom tooltip for Flow Insights
+  const [flowTooltip, setFlowTooltip] = useState<{ visible: boolean; x: number; y: number; content: string } | null>(null);
   function setChartRef(ref: any, inst: any) {
     try { ref.current = inst?.getEchartsInstance ? inst.getEchartsInstance() : null; } catch { ref.current = null; }
   }
@@ -2998,7 +3000,60 @@ export default function ReportsPage() {
                                     }
                                   }}>
                                   <ReactECharts
-                                    onChartReady={(i:any)=>setChartRef(flowInsightsRef, { getEchartsInstance: ()=>i })}
+                                    onChartReady={(chartInstance:any)=>{
+                                      setChartRef(flowInsightsRef, { getEchartsInstance: ()=>chartInstance });
+
+                                      const chartDom = chartInstance.getDom();
+                                      const journeys = journeysData;
+                                      const visibleJourneys = journeys.slice(0, 30);
+                                      const predefinedColors = ['#DC2626', '#16A34A', '#2563EB'];
+                                      const seriesCount = visibleJourneys.length;
+                                      const colors = Array.from({ length: seriesCount }, (_: any, i: number) =>
+                                        i < predefinedColors.length ? predefinedColors[i] : hslToHex((360 * (i - predefinedColors.length)) / Math.max(1, seriesCount - predefinedColors.length), 50, 50)
+                                      );
+
+                                      // Show custom tooltip on mouseover
+                                      chartInstance.on('mouseover', 'series', (params: any) => {
+                                        const journey = visibleJourneys[params.seriesIndex];
+                                        const steps = Array.isArray(journey?.steps) ? journey.steps : [];
+                                        const currentStepIdx = params.data[0];
+                                        const stepNumber = currentStepIdx + 1;
+                                        const prevStep = currentStepIdx > 0 ? steps[currentStepIdx - 1] : null;
+                                        const nextStep = currentStepIdx < steps.length - 1 ? steps[currentStepIdx + 1] : null;
+
+                                        let pathStr = '<div style="padding: 4px 0;">';
+                                        if (prevStep) pathStr += `<span style="opacity: 0.6;">${String(prevStep?.screen_name || prevStep?.screen || '').substring(0, 20)}</span> → `;
+                                        pathStr += `<span style="font-weight: 700; color: #60A5FA;">${params.data[1]}</span>`;
+                                        if (nextStep) pathStr += ` → <span style="opacity: 0.6;">${String(nextStep?.screen_name || nextStep?.screen || '').substring(0, 20)}</span>`;
+                                        pathStr += '</div>';
+
+                                        const content = `<div style="min-width: 200px;">
+                                          <div style="font-weight: 700; margin-bottom: 6px; color: ${colors[params.seriesIndex]};">${params.seriesName}</div>
+                                          <div style="font-size: 12px; margin-bottom: 4px;"><span style="opacity: 0.7;">Step:</span> <b>${stepNumber}</b> of ${steps.length}</div>
+                                          <div style="font-size: 12px; margin-bottom: 6px;"><span style="opacity: 0.7;">Screen:</span> <b>${params.data[1]}</b></div>
+                                          <div style="font-size: 11px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px; margin-top: 4px;">
+                                            ${pathStr}
+                                          </div>
+                                        </div>`;
+
+                                        setFlowTooltip({
+                                          visible: true,
+                                          x: params.event.event.clientX,
+                                          y: params.event.event.clientY,
+                                          content
+                                        });
+                                      });
+
+                                      // Hide custom tooltip on mouseout
+                                      chartInstance.on('mouseout', 'series', () => {
+                                        setFlowTooltip(null);
+                                      });
+
+                                      // Hide tooltip when mouse leaves chart
+                                      chartDom.addEventListener('mouseleave', () => {
+                                        setFlowTooltip(null);
+                                      });
+                                    }}
                                     style={{ height: 400, width: '100%', margin: 0 }}
                                     opts={{ renderer: 'canvas' }}
                                     option={(() => {
@@ -3255,42 +3310,7 @@ export default function ReportsPage() {
                                           color: colors,
                                           animationDuration: 600,
                                           tooltip: {
-                                            trigger: 'item',
-                                            backgroundColor: 'rgba(0,0,0,0.9)',
-                                            borderColor: '#374151',
-                                            borderWidth: 1,
-                                            textStyle: { color: '#f9fafb', fontSize: 13 },
-                                            formatter: (p: any) => {
-                                              const journey = visibleJourneys[p.seriesIndex];
-                                              const steps = Array.isArray(journey?.steps) ? journey.steps : [];
-                                              const currentStepIdx = p.data[0]; // This is now 0-based index
-                                              const stepNumber = currentStepIdx + 1; // Convert to 1-based step number
-                                              const prevStep = currentStepIdx > 0 ? steps[currentStepIdx - 1] : null;
-                                              const nextStep = currentStepIdx < steps.length - 1 ? steps[currentStepIdx + 1] : null;
-
-                                              let pathStr = '<div style="padding: 4px 0;">';
-                                              if (prevStep) pathStr += `<span style="opacity: 0.6;">${String(prevStep?.screen_name || prevStep?.screen || '').substring(0, 20)}</span> → `;
-                                              pathStr += `<span style="font-weight: 700; color: #60A5FA;">${p.data[1]}</span>`;
-                                              if (nextStep) pathStr += ` → <span style="opacity: 0.6;">${String(nextStep?.screen_name || nextStep?.screen || '').substring(0, 20)}</span>`;
-                                              pathStr += '</div>';
-
-                                              return `<div style="min-width: 200px;">
-                                                <div style="font-weight: 700; margin-bottom: 6px; color: ${colors[p.seriesIndex]};">${p.seriesName}</div>
-                                                <div style="font-size: 12px; margin-bottom: 4px;"><span style="opacity: 0.7;">Step:</span> <b>${stepNumber}</b> of ${steps.length}</div>
-                                                <div style="font-size: 12px; margin-bottom: 6px;"><span style="opacity: 0.7;">Screen:</span> <b>${p.data[1]}</b></div>
-                                                <div style="font-size: 11px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px; margin-top: 4px;">
-                                                  ${pathStr}
-                                                </div>
-                                              </div>`;
-                                            },
-                                            position: 'top',
-                                            confine: false,
-                                            enterable: false,
-                                            renderMode: 'html',
-                                            appendToBody: false,
-                                            showDelay: 0,
-                                            hideDelay: 0,
-                                            transitionDuration: 0
+                                            show: false
                                           },
                                           legend: {
                                             top: 10,
@@ -3580,6 +3600,28 @@ export default function ReportsPage() {
                                     })()}
                                   />
                                   </div>
+                                  {/* Custom tooltip for Flow Insights */}
+                                  {flowTooltip && flowTooltip.visible && (
+                                    <div
+                                      style={{
+                                        position: 'fixed',
+                                        left: flowTooltip.x + 10,
+                                        top: flowTooltip.y - 10,
+                                        backgroundColor: 'rgba(0,0,0,0.9)',
+                                        borderColor: '#374151',
+                                        borderWidth: 1,
+                                        borderStyle: 'solid',
+                                        borderRadius: 4,
+                                        padding: 12,
+                                        color: '#f9fafb',
+                                        fontSize: 13,
+                                        pointerEvents: 'none',
+                                        zIndex: 9999,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                                      }}
+                                      dangerouslySetInnerHTML={{ __html: flowTooltip.content }}
+                                    />
+                                  )}
                                 </div>
 
                                 {/* Backtracks lollipop chart in Path tab */}
