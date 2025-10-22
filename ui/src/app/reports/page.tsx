@@ -830,7 +830,7 @@ export default function ReportsPage() {
   }, [metrics]);
 
   // Derived recommendations list (from backend derived_recommendations or LLM insights)
-  type RecItem = { text: string, count: number, screenId?: string, image?: string, personas?: string[] };
+  type RecItem = { text: string, count: number, screenId?: string, image?: string, personas?: string[], clarity_score?: number, confidence_score?: number, recovery_score?: number, delight_score?: number };
   type RecGroup = { screenId: string, name?: string, image?: string | null, totalCount?: number, items: RecItem[] };
   const recommendations = useMemo<RecItem[]>(() => {
     if (!metrics) return [] as RecItem[];
@@ -855,7 +855,16 @@ export default function ReportsPage() {
         name: String(g.name || ''),
         image: g.image || null,
         totalCount: Number(g.totalCount || g.total || 0),
-        items: Array.isArray(g.items) ? g.items.map((it: any) => ({ text: String(it.text || ''), count: Number(it.count || 0), personas: Array.isArray(it.personas) ? it.personas.map((p:string)=>String(p)) : [], raw: String(it.text_raw || it.text || '') })) : [],
+        items: Array.isArray(g.items) ? g.items.map((it: any) => ({
+          text: String(it.text || ''),
+          count: Number(it.count || 0),
+          personas: Array.isArray(it.personas) ? it.personas.map((p:string)=>String(p)) : [],
+          raw: String(it.text_raw || it.text || ''),
+          clarity_score: it.clarity_score !== undefined ? Number(it.clarity_score) : undefined,
+          confidence_score: it.confidence_score !== undefined ? Number(it.confidence_score) : undefined,
+          recovery_score: it.recovery_score !== undefined ? Number(it.recovery_score) : undefined,
+          delight_score: it.delight_score !== undefined ? Number(it.delight_score) : undefined
+        })) : [],
       })) as RecGroup[];
       return mapped;
     } catch { return [] as RecGroup[]; }
@@ -879,6 +888,7 @@ export default function ReportsPage() {
 
   const [showAllRecs, setShowAllRecs] = React.useState(false);
   const [selectedPersonaFilters, setSelectedPersonaFilters] = React.useState<Set<string>>(new Set());
+  const [selectedThemeSort, setSelectedThemeSort] = React.useState<'clarity' | 'confidence' | 'recovery' | 'delight' | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Set<string>>(new Set());
 
   // Map persona names to chip CSS classes
@@ -2189,18 +2199,24 @@ export default function ReportsPage() {
                     {/* Divider between personas and themes */}
                     <span className="filters__divider" />
 
-                    {/* Theme chips - fixed list, always shown but disabled */}
-                    <span className="filters__label">Themes:</span>
-                    {themeChips.map((theme, idx) => (
+                    {/* Theme chips - for sorting by theme score */}
+                    <span className="filters__label">Sort by:</span>
+                    {themeChips.map((theme, idx) => {
+                      const themeKey = theme.toLowerCase() as 'clarity' | 'confidence' | 'recovery' | 'delight';
+                      const isActive = selectedThemeSort === themeKey;
+                      return (
                       <button
                         key={idx}
-                        className={`chip ${getThemeChipClass(theme)}`}
-                        disabled
-                        style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                          className={`chip ${getThemeChipClass(theme)} ${isActive ? 'is-active' : ''}`}
+                          onClick={() => {
+                            // Toggle: if already selected, deselect; otherwise select
+                            setSelectedThemeSort(isActive ? null : themeKey);
+                          }}
                       >
                         {theme}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               }
@@ -2225,7 +2241,20 @@ export default function ReportsPage() {
                         return item.personas.some(p => selectedPersonaFilters.has(p));
                       })
                     }))
-                    .filter(g => g.items.length > 0);
+                    .filter(g => g.items.length > 0)
+                    .map(g => ({
+                      ...g,
+                      items: (() => {
+                        // Sort items by selected theme score if a theme is selected
+                        if (!selectedThemeSort) return g.items;
+                        const scoreKey = `${selectedThemeSort}_score` as keyof RecItem;
+                        return [...g.items].sort((a, b) => {
+                          const scoreA = (a[scoreKey] as number) || 0;
+                          const scoreB = (b[scoreKey] as number) || 0;
+                          return scoreB - scoreA; // Descending order (highest score first)
+                        });
+                      })()
+                    }));
 
                   // Always show all recommendations
                   return groups.map((g, gi) => {
@@ -2999,7 +3028,7 @@ export default function ReportsPage() {
                                       e.stopPropagation();
                                     }
                                   }}>
-                                  <ReactECharts
+                                  <ReactECharts 
                                     onChartReady={(chartInstance:any)=>{
                                       setChartRef(flowInsightsRef, { getEchartsInstance: ()=>chartInstance });
 

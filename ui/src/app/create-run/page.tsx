@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { IconPlus } from '../../components/icons';
 
 type Project = { id: string; name: string; status: string; created_at?: string; updated_at?: string };
 type Persona = { id: string; name: string; bio?: string };
@@ -69,11 +70,21 @@ export default function LaunchTestPage() {
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-semibold text-slate-900 mb-2">Welcome to AI Usability</h1>
           <p className="text-slate-600 mb-6">Run usability tests before you launch. Let's set up your first project.</p>
-          <Link href="/configure-test">
-            <button className="flex items-center gap-2 px-6 py-3 rounded-lg mx-auto transition-colors" style={{ width: 'fit-content', fontSize: '15px', fontWeight: '600', backgroundColor: '#000000', color: '#FFFFFF', border: 'none' }}>
-              Create Project
-            </button>
-          </Link>
+          <button
+            onClick={() => router.push('/configure-test')}
+            className="flex items-center gap-2 px-6 py-3 rounded-lg mx-auto transition-colors hover:bg-slate-800 cursor-pointer"
+            style={{ width: 'fit-content', fontSize: '15px', fontWeight: '600', backgroundColor: '#000000', color: '#FFFFFF', border: 'none' }}
+          >
+            <IconPlus width={20} height={20} /> Create Project
+          </button>
+          <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '1px dashed #CBD5E1', textAlign: 'left' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: '600', color: '#64748B', marginBottom: '12px' }}>How it works</h2>
+            <ol style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#64748B' }}>
+              <li>1️⃣ Connect your Figma design</li>
+              <li>2️⃣ Define tasks and personas</li>
+              <li>3️⃣ Run tests and view results</li>
+            </ol>
+          </div>
         </div>
       </main>
     );
