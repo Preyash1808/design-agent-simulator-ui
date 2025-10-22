@@ -2585,7 +2585,21 @@ export default function ReportsPage() {
                               <span>{aggregateEmotions ? 'PERSONA' : 'USERS'}</span>
                             </label>
                           </div>
-                          <ReactECharts key={aggregateEmotions ? 'emo-agg' : 'emo-users'} notMerge style={{ height: 360 }} option={(function(){
+                          <div onWheel={(e) => {
+                            // Allow page scroll when SHIFT is not pressed
+                            if (!e.shiftKey) {
+                              // Don't prevent default - let the scroll propagate
+                            } else {
+                              // SHIFT is pressed - prevent scroll to allow chart zoom
+                              e.stopPropagation();
+                            }
+                          }}>
+                          <ReactECharts
+                            key={aggregateEmotions ? 'emo-agg' : 'emo-users'}
+                            notMerge
+                            style={{ height: 360 }}
+                            opts={{ renderer: 'canvas' }}
+                            option={(function(){
                             // Sort emotions from negative (bottom) to positive (top)
                             // 10 product-appropriate buckets equally spanning negative→positive
                             const CANON = ['frustrated','annoyed','confused','anxious','overwhelmed','neutral','focused','satisfied','confident','delighted'];
@@ -2726,12 +2740,13 @@ export default function ReportsPage() {
                               grid: { left: 70, right: 20, top: 28, bottom: 40, containLabel: true },
                               xAxis: { type: 'value', min: 1, max: maxStep, axisLabel: { color: '#cbd5e1' }, name: 'Step', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8' } },
                               yAxis: { type: 'category', data: paddedStates, axisLabel: { color: '#1e293b', fontWeight: 600, lineHeight: 20, margin: 12 }, name: 'Emotional State', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#94a3b8', padding: [0, 0, 6, 0], fontSize: 12, align: 'left' } },
-                              legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' }, selector: false },
+                              legend: { top: 8, right: 10, textStyle: { color: '#cbd5e1' }, selectedMode: 'multiple', selected: Object.fromEntries(series.map((s: any) => [s.name, true])) },
                               dataZoom: [ { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: 'shift', moveOnMouseMove: 'shift', moveOnMouseWheel: false, preventDefaultMouseMove: false }, { type: 'slider', xAxisIndex: 0, start: 0, end: 30, height: 16, bottom: 6 } ],
                               tooltip: { trigger: 'item', formatter: (p:any)=> { const step=p?.data?.[0]; const yi=p?.data?.[1]; const sent=p?.data?.[2]; const screen=p?.data?.[3]||''; const observedRaw=p?.data?.[4]||''; const plottedRaw=states[yi]||''; const cap=(s:string)=> s ? (s.charAt(0).toUpperCase()+s.slice(1)) : s; const observed=cap(String(observedRaw)); const plotted=cap(String(plottedRaw)); const sentimentTxt=(typeof sent==='number'?(sent>=0?`+${sent.toFixed(2)}`:sent.toFixed(2)):'-'); return `${p.seriesName} · Step ${step}${screen?` · ${screen}`:''}<br/>Observed: ${observed} (sentiment ${sentimentTxt})<br/>Plotted as: ${plotted}`; }, showDelay: 0, hideDelay: 0, enterable: false, transitionDuration: 0.05 },
                               series,
                             } as any;
                           })()} />
+                          </div>
                         </div>
 
                         {/* Flow Insights removed per request */}
@@ -2973,73 +2988,410 @@ export default function ReportsPage() {
                                 {/* Flow insights content here */}
                                 <div className="tile" ref={flowInsightsContainerRef} id="flow-insights">
                                   <h4>Flow Insights</h4>
-                                  <ReactECharts 
+                                  <div onWheel={(e) => {
+                                    // Allow page scroll when neither SHIFT nor CTRL is pressed
+                                    if (!e.shiftKey && !e.ctrlKey) {
+                                      // Don't prevent default - let the scroll propagate
+                                    } else {
+                                      // Modifier key is pressed - prevent scroll to allow chart zoom
+                                      e.stopPropagation();
+                                    }
+                                  }}>
+                                  <ReactECharts
                                     onChartReady={(i:any)=>setChartRef(flowInsightsRef, { getEchartsInstance: ()=>i })}
-                                    style={{ height: 420, width: '100%', margin: 0 }} 
+                                    style={{ height: 400, width: '100%', margin: 0 }}
+                                    opts={{ renderer: 'canvas' }}
                                     option={(() => {
                                       // Prefer real per-user journeys when available; fall back to aggregated paths
                                       const journeys = journeysData;
                                       if (Array.isArray(journeys) && journeys.length > 0) {
-                                        // Build screen set and max steps
+                                        // Build screen set and max steps, track frequency for sorting
                                         const screensSet = new Set<string>();
+                                        const screenFrequency = new Map<string, number>();
+                                        const screenPositions = new Map<string, number[]>(); // Track step positions for each screen
+                                        const transitions = new Map<string, Map<string, number>>(); // Track screen-to-screen transitions
                                         let maxSteps = 0;
+
                                         journeys.forEach((j: any) => {
                                           const steps = Array.isArray(j?.steps) ? j.steps : [];
                                           maxSteps = Math.max(maxSteps, steps.length);
-                                          steps.forEach((s: any) => { const n = String(s?.screen_name || s?.screen || ''); if (n) screensSet.add(n); });
+                                          steps.forEach((s: any, stepIndex: number) => {
+                                            const n = String(s?.screen_name || s?.screen || '');
+                                            if (n) {
+                                              screensSet.add(n);
+                                              screenFrequency.set(n, (screenFrequency.get(n) || 0) + 1);
+                                              // Track positions where this screen appears
+                                              if (!screenPositions.has(n)) {
+                                                screenPositions.set(n, []);
+                                              }
+                                              screenPositions.get(n)!.push(stepIndex);
+
+                                              // Track transitions to next screen
+                                              if (stepIndex < steps.length - 1) {
+                                                const nextScreen = String(steps[stepIndex + 1]?.screen_name || steps[stepIndex + 1]?.screen || '');
+                                                if (nextScreen) {
+                                                  if (!transitions.has(n)) {
+                                                    transitions.set(n, new Map());
+                                                  }
+                                                  const screenTransitions = transitions.get(n)!;
+                                                  screenTransitions.set(nextScreen, (screenTransitions.get(nextScreen) || 0) + 1);
+                                                }
+                                              }
+                                            }
+                                          });
                                         });
-                                        const screenList = Array.from(screensSet);
+
+                                        // Calculate average position for each screen
+                                        const screenAvgPos = new Map<string, number>();
+                                        screensSet.forEach(screen => {
+                                          const positions = screenPositions.get(screen) || [0];
+                                          const avg = positions.reduce((sum, p) => sum + p, 0) / positions.length;
+                                          screenAvgPos.set(screen, avg);
+                                        });
+
+                                        // Group screens by similar journey positions with overlap for connected screens
+                                        const positionBuckets = new Map<number, string[]>();
+                                        const screenToBucket = new Map<string, number>();
+
+                                        screensSet.forEach(screen => {
+                                          const avgPos = screenAvgPos.get(screen) || 0;
+                                          const baseBucket = Math.floor(avgPos / 3); // Group by 3-step ranges
+
+                                          // Check if this screen has strong connections to screens in adjacent buckets
+                                          let assignedBucket = baseBucket;
+                                          let maxConnectionToBucket = 0;
+
+                                          // Check buckets within ±1 range
+                                          for (let b = baseBucket - 1; b <= baseBucket + 1; b++) {
+                                            const screensInBucket = positionBuckets.get(b) || [];
+                                            let connectionStrength = 0;
+
+                                            screensInBucket.forEach(otherScreen => {
+                                              const aToB = transitions.get(screen)?.get(otherScreen) || 0;
+                                              const bToA = transitions.get(otherScreen)?.get(screen) || 0;
+                                              // Prioritize bidirectional connections
+                                              connectionStrength += (aToB > 0 && bToA > 0) ? (aToB + bToA) * 2 : (aToB + bToA);
+                                            });
+
+                                            if (connectionStrength > maxConnectionToBucket) {
+                                              maxConnectionToBucket = connectionStrength;
+                                              assignedBucket = b;
+                                            }
+                                          }
+
+                                          // If no strong connections found, use base bucket
+                                          if (maxConnectionToBucket < 2) {
+                                            assignedBucket = baseBucket;
+                                          }
+
+                                          if (!positionBuckets.has(assignedBucket)) {
+                                            positionBuckets.set(assignedBucket, []);
+                                          }
+                                          positionBuckets.get(assignedBucket)!.push(screen);
+                                          screenToBucket.set(screen, assignedBucket);
+                                        });
+
+                                        // Optimize ordering within each bucket to minimize crossings
+                                        const optimizeBucketOrder = (screens: string[]): string[] => {
+                                          if (screens.length <= 1) return screens;
+
+                                          // Calculate connection strength between each pair of screens
+                                          const getConnectionWeight = (a: string, b: string): number => {
+                                            const aToB = transitions.get(a)?.get(b) || 0;
+                                            const bToA = transitions.get(b)?.get(a) || 0;
+                                            const totalTransitions = aToB + bToA;
+
+                                            // Strong loops (high bidirectional traffic) get exponential weight
+                                            if (aToB > 0 && bToA > 0) {
+                                              const minTransitions = Math.min(aToB, bToA);
+                                              // More balanced loops get even higher weight
+                                              const balanceFactor = minTransitions / Math.max(aToB, bToA);
+                                              return totalTransitions * (3 + balanceFactor * 2); // 3x to 5x multiplier
+                                            }
+
+                                            // High one-way traffic also gets bonus
+                                            if (totalTransitions >= 3) {
+                                              return totalTransitions * 1.5;
+                                            }
+
+                                            return totalTransitions;
+                                          };
+
+                                          // Greedy algorithm: start with most connected pair, build outward
+                                          const ordered: string[] = [];
+                                          const remaining = new Set(screens);
+
+                                          // Find the pair with strongest connection
+                                          let maxWeight = 0;
+                                          let bestPair: [string, string] | null = null;
+                                          screens.forEach(a => {
+                                            screens.forEach(b => {
+                                              if (a !== b) {
+                                                const weight = getConnectionWeight(a, b);
+                                                if (weight > maxWeight) {
+                                                  maxWeight = weight;
+                                                  bestPair = [a, b];
+                                                }
+                                              }
+                                            });
+                                          });
+
+                                          if (bestPair) {
+                                            ordered.push(bestPair[0], bestPair[1]);
+                                            remaining.delete(bestPair[0]);
+                                            remaining.delete(bestPair[1]);
+                                          } else if (screens.length > 0) {
+                                            // No connections, just add first screen
+                                            ordered.push(screens[0]);
+                                            remaining.delete(screens[0]);
+                                          }
+
+                                          // Iteratively add screens that have strongest connection to current endpoints
+                                          while (remaining.size > 0) {
+                                            let bestScreen: string | null = null;
+                                            let bestWeight = -1;
+                                            let addToEnd = true;
+
+                                            remaining.forEach(screen => {
+                                              const weightToStart = getConnectionWeight(screen, ordered[0]);
+                                              const weightToEnd = getConnectionWeight(screen, ordered[ordered.length - 1]);
+
+                                              if (weightToEnd > bestWeight) {
+                                                bestWeight = weightToEnd;
+                                                bestScreen = screen;
+                                                addToEnd = true;
+                                              }
+                                              if (weightToStart > bestWeight) {
+                                                bestWeight = weightToStart;
+                                                bestScreen = screen;
+                                                addToEnd = false;
+                                              }
+                                            });
+
+                                            if (bestScreen) {
+                                              if (addToEnd) {
+                                                ordered.push(bestScreen);
+                                              } else {
+                                                ordered.unshift(bestScreen);
+                                              }
+                                              remaining.delete(bestScreen);
+                                            } else {
+                                              // No more connections, add remaining arbitrarily
+                                              const next = remaining.values().next().value;
+                                              ordered.push(next);
+                                              remaining.delete(next);
+                                            }
+                                          }
+
+                                          return ordered;
+                                        };
+
+                                        // Build final screen list by processing buckets in order
+                                        const screenList: string[] = [];
+                                        const sortedBuckets = Array.from(positionBuckets.keys()).sort((a, b) => a - b);
+                                        sortedBuckets.forEach(bucket => {
+                                          const screens = positionBuckets.get(bucket) || [];
+                                          const optimized = optimizeBucketOrder(screens);
+                                          screenList.push(...optimized);
+                                        });
                                         const xLabels = Array.from({ length: Math.max(maxSteps, 40) }, (_: any, i: number) => String(i + 1));
-                                        const wrap = (v: string) => v.length > 18 ? v.replace(/(.{18})/g, '$1\n') : v;
 
                                         const visibleJourneys = journeys.slice(0, 30);
                                         const seriesCount = visibleJourneys.length;
-                                        // Professional muted palette with reduced saturation and adjusted lightness
-                                        const colors = Array.from({ length: seriesCount }, (_: any, i: number) => hslToHex((360 * i) / Math.max(1, seriesCount), 45, 48));
+
+                                        // Predefined distinct colors for first 3 users, then generated colors
+                                        const predefinedColors = ['#DC2626', '#16A34A', '#2563EB'];
+                                        const colors = Array.from({ length: seriesCount }, (_: any, i: number) =>
+                                          i < predefinedColors.length ? predefinedColors[i] : hslToHex((360 * (i - predefinedColors.length)) / Math.max(1, seriesCount - predefinedColors.length), 50, 50)
+                                        );
+
+                                        // Calculate path frequency for visual hierarchy
+                                        const pathFrequency = visibleJourneys.map((j: any) => {
+                                          const steps = Array.isArray(j?.steps) ? j.steps : [];
+                                          return steps.length;
+                                        });
+                                        const maxFreq = Math.max(...pathFrequency, 1);
+
                                         const series = visibleJourneys.map((j: any, idx: number) => {
                                           const steps = Array.isArray(j?.steps) ? j.steps : [];
-                                          const data = steps.map((s: any, i: number) => [i + 1, String(s?.screen_name || s?.screen || '')]);
+                                          const data = steps.map((s: any, i: number) => [i, String(s?.screen_name || s?.screen || '')]);
+
+                                          // Visual hierarchy: more steps = more prominent (assuming longer = more complete)
+                                          const frequency = pathFrequency[idx];
+                                          const normalizedFreq = frequency / maxFreq;
+                                          const lineWidth = 1.2 + (normalizedFreq * 1.3); // Range: 1.2 to 2.5
+                                          const opacity = 0.5 + (normalizedFreq * 0.5); // Range: 0.5 to 1.0
+
                                           return {
                                             name: String(j?.name || `User ${idx + 1}`),
                                             type: 'line',
                                             data,
-                                            smooth: 0.15,
-                                            lineStyle: { color: colors[idx], width: 2 },
-                                            itemStyle: { color: colors[idx] },
+                                            smooth: 0.3,
+                                            lineStyle: {
+                                              color: colors[idx],
+                                              width: lineWidth,
+                                              opacity: Math.max(0.25, opacity * 0.6),
+                                              cap: 'round',
+                                              join: 'round'
+                                            },
+                                            itemStyle: { color: colors[idx], opacity: Math.max(0.4, opacity * 0.7) },
                                             showSymbol: true,
                                             symbol: 'circle',
-                                            symbolSize: 5,
-                                            emphasis: { focus: 'series' }
+                                            symbolSize: 4,
+                                            emphasis: {
+                                              focus: 'series',
+                                              blurScope: 'coordinateSystem',
+                                              lineStyle: { width: lineWidth + 1.5, opacity: 1, shadowBlur: 4, shadowColor: colors[idx] },
+                                              itemStyle: { opacity: 1, borderWidth: 2, borderColor: '#fff', symbolSize: 6 }
+                                            }
                                           };
                                         });
+
+                                        // Calculate dynamic X-axis interval based on total steps
+                                        // Show every label for <=15 steps, every 2nd for <=30, every 5th for <=60, else every 10th
+                                        const xAxisInterval = maxSteps <= 15 ? 0 : maxSteps <= 30 ? 1 : maxSteps <= 60 ? 4 : 9;
 
                                         return {
                                           color: colors,
                                           animationDuration: 600,
-                                          tooltip: { trigger: 'item', backgroundColor: 'rgba(0,0,0,0.8)', borderColor: '#374151', textStyle: { color: '#f9fafb' }, formatter: (p: any) => `${p.seriesName}<br/>Step ${p.data[0]}: ${p.data[1]}`, confine: true, triggerOn: 'mousemove', alwaysShowContent: false, enterable: false, showDelay: 0, hideDelay: 0, transitionDuration: 0.05 },
-                                          legend: { top: 10, right: 10, orient: 'horizontal', align: 'auto', type: 'scroll', textStyle: { color: '#1f2937', fontSize: 12, fontWeight: 600 }, itemWidth: 18, itemHeight: 10, icon: 'roundRect' },
-                                          grid: { left: 0, right: 16, bottom: 50, top: 80, containLabel: true },
-                                          xAxis: { type: 'category', name: 'Step', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#1e293b', fontWeight: 600 }, axisLabel: { color: '#1e293b', fontWeight: 500, interval: 0 }, axisTick: { show: true, alignWithLabel: true, lineStyle: { color: '#1e293b' } }, boundaryGap: false, axisPointer: { show: false }, axisLine: { lineStyle: { color: '#374151' } }, splitLine: { show: true, lineStyle: { color: '#e2e8f0', type: 'dashed', width: 1 } }, data: xLabels },
-                                          yAxis: { type: 'category', name: 'Screen Name', nameLocation: 'end', nameRotate: 0, nameGap: 10, nameTextStyle: { color: '#1e293b', fontWeight: 800, fontSize: 14, align: 'left' }, axisLabel: { color: '#334155', fontSize: 11, fontWeight: 500, lineHeight: 15, hideOverlap: false, interval: 0, formatter: (v: string) => v.length > 20 ? v.substring(0, 18) + '...' : v, margin: 8 }, axisTick: { show: true, alignWithLabel: true, lineStyle: { color: '#cbd5e1' } }, axisLine: { lineStyle: { color: '#cbd5e1', width: 1 } }, boundaryGap: true, data: screenList },
+                                          tooltip: {
+                                            trigger: 'item',
+                                            backgroundColor: 'rgba(0,0,0,0.9)',
+                                            borderColor: '#374151',
+                                            borderWidth: 1,
+                                            textStyle: { color: '#f9fafb', fontSize: 13 },
+                                            formatter: (p: any) => {
+                                              const journey = visibleJourneys[p.seriesIndex];
+                                              const steps = Array.isArray(journey?.steps) ? journey.steps : [];
+                                              const currentStepIdx = p.data[0]; // This is now 0-based index
+                                              const stepNumber = currentStepIdx + 1; // Convert to 1-based step number
+                                              const prevStep = currentStepIdx > 0 ? steps[currentStepIdx - 1] : null;
+                                              const nextStep = currentStepIdx < steps.length - 1 ? steps[currentStepIdx + 1] : null;
+
+                                              let pathStr = '<div style="padding: 4px 0;">';
+                                              if (prevStep) pathStr += `<span style="opacity: 0.6;">${String(prevStep?.screen_name || prevStep?.screen || '').substring(0, 20)}</span> → `;
+                                              pathStr += `<span style="font-weight: 700; color: #60A5FA;">${p.data[1]}</span>`;
+                                              if (nextStep) pathStr += ` → <span style="opacity: 0.6;">${String(nextStep?.screen_name || nextStep?.screen || '').substring(0, 20)}</span>`;
+                                              pathStr += '</div>';
+
+                                              return `<div style="min-width: 200px;">
+                                                <div style="font-weight: 700; margin-bottom: 6px; color: ${colors[p.seriesIndex]};">${p.seriesName}</div>
+                                                <div style="font-size: 12px; margin-bottom: 4px;"><span style="opacity: 0.7;">Step:</span> <b>${stepNumber}</b> of ${steps.length}</div>
+                                                <div style="font-size: 12px; margin-bottom: 6px;"><span style="opacity: 0.7;">Screen:</span> <b>${p.data[1]}</b></div>
+                                                <div style="font-size: 11px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px; margin-top: 4px;">
+                                                  ${pathStr}
+                                                </div>
+                                              </div>`;
+                                            },
+                                            position: 'top',
+                                            confine: false,
+                                            enterable: false,
+                                            renderMode: 'html',
+                                            appendToBody: false,
+                                            showDelay: 0,
+                                            hideDelay: 0,
+                                            transitionDuration: 0
+                                          },
+                                          legend: {
+                                            top: 10,
+                                            right: 10,
+                                            orient: 'horizontal',
+                                            align: 'auto',
+                                            type: 'scroll',
+                                            textStyle: { color: '#1f2937', fontSize: 12, fontWeight: 600 },
+                                            itemGap: 20,
+                                            itemWidth: 40,
+                                            itemHeight: 14,
+                                            icon: 'path://M0,7 L15,7 M15,4 A3,3,0,1,1,15,10 A3,3,0,1,1,15,4 Z M15,7 L30,7',
+                                            itemStyle: {
+                                              borderWidth: 0
+                                            },
+                                            lineStyle: {
+                                              width: 2,
+                                              cap: 'round'
+                                            },
+                                            selectedMode: 'multiple',
+                                            selected: Object.fromEntries(series.map((s: any) => [s.name, true]))
+                                          },
+                                          grid: { left: 140, right: 16, bottom: 50, top: 80, containLabel: false },
+                                          xAxis: {
+                                            type: 'category',
+                                            name: 'Step',
+                                            nameLocation: 'middle',
+                                            nameGap: 26,
+                                            nameTextStyle: { color: '#1e293b', fontWeight: 600 },
+                                            axisLabel: { color: '#1e293b', fontWeight: 500, interval: xAxisInterval, fontSize: 11 },
+                                            axisTick: { show: true, alignWithLabel: true, lineStyle: { color: '#cbd5e1' }, interval: 0 },
+                                            minorTick: { show: true, splitNumber: 5 },
+                                            boundaryGap: false,
+                                            axisPointer: { show: true, type: 'line', lineStyle: { color: '#94a3b8', type: 'dashed', width: 1 } },
+                                            axisLine: { lineStyle: { color: '#cbd5e1' } },
+                                            splitLine: { show: true, lineStyle: { color: '#f1f5f9', type: 'solid', width: 1 } },
+                                            data: xLabels
+                                          },
+                                          yAxis: {
+                                            type: 'category',
+                                            name: 'Screen Name',
+                                            nameLocation: 'end',
+                                            nameRotate: 0,
+                                            nameGap: 10,
+                                            nameTextStyle: { color: '#1e293b', fontWeight: 800, fontSize: 14, align: 'left' },
+                                            axisLabel: {
+                                              color: '#334155',
+                                              fontSize: 12,
+                                              fontWeight: 500,
+                                              lineHeight: 18,
+                                              hideOverlap: false,
+                                              interval: 0,
+                                              width: 130,
+                                              overflow: 'truncate',
+                                              formatter: (v: string) => {
+                                                if (v.length > 22) {
+                                                  // Smart truncation at word boundary
+                                                  const truncated = v.substring(0, 20);
+                                                  const lastSpace = truncated.lastIndexOf(' ');
+                                                  return lastSpace > 10 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+                                                }
+                                                return v;
+                                              },
+                                              margin: 8
+                                            },
+                                            axisTick: { show: true, alignWithLabel: true, lineStyle: { color: '#e2e8f0' } },
+                                            axisLine: { lineStyle: { color: '#e2e8f0', width: 1 } },
+                                            boundaryGap: true,
+                                            data: screenList
+                                          },
                                           dataZoom: [
-                                            // Inside zoom: mouse wheel + trackpad pinch/drag for smooth navigation
+                                            // Inside zoom X-axis
                                             {
                                               type: 'inside',
                                               xAxisIndex: 0,
                                               filterMode: 'none',
-                                              zoomOnMouseWheel: 'shift',  // Only zoom when holding Shift
-                                              moveOnMouseMove: false,      // Never capture drag; use slider instead
-                                              moveOnMouseWheel: false,     // Do not intercept normal page scroll
+                                              zoomOnMouseWheel: 'shift',
+                                              moveOnMouseMove: false,
+                                              moveOnMouseWheel: false,
                                               preventDefaultMouseMove: false
                                             },
-                                            // Slider zoom: mini-map overview bar at bottom for discrete navigation
+                                            // Inside zoom Y-axis (NEW)
+                                            {
+                                              type: 'inside',
+                                              yAxisIndex: 0,
+                                              filterMode: 'none',
+                                              zoomOnMouseWheel: 'ctrl',
+                                              moveOnMouseMove: false,
+                                              moveOnMouseWheel: false,
+                                              preventDefaultMouseMove: false,
+                                              start: 0,
+                                              end: 100
+                                            },
+                                            // Slider zoom X-axis
                                             {
                                               type: 'slider',
                                               xAxisIndex: 0,
-                                              start: 0,        // Start at 0%
-                                              end: Math.min((25 / maxSteps) * 100, 100),  // Show ~25 steps initially
-                                              minSpan: (5 / maxSteps) * 100,      // Minimum 5 steps visible
-                                              maxSpan: 100,    // Can expand to show all steps
+                                              start: 0,
+                                              end: Math.min((25 / maxSteps) * 100, 100),
+                                              minSpan: (5 / maxSteps) * 100,
+                                              maxSpan: 100,
                                               zoomLock: false,
                                               height: 20,
                                               bottom: 5,
@@ -3049,11 +3401,11 @@ export default function ReportsPage() {
                                               fillerColor: 'rgba(59,130,246,0.25)',
                                               handleIcon: 'path://M0,0 L0,20 L6,20 L6,0 Z',
                                               handleSize: '100%',
-                                              handleStyle: { 
+                                              handleStyle: {
                                                 color: '#3b82f6',
-                                                borderColor: '#1e40af', 
-                                                borderWidth: 1.5, 
-                                                shadowBlur: 3, 
+                                                borderColor: '#1e40af',
+                                                borderWidth: 1.5,
+                                                shadowBlur: 3,
                                                 shadowColor: 'rgba(0,0,0,0.2)',
                                                 borderRadius: 4
                                               },
@@ -3080,6 +3432,45 @@ export default function ReportsPage() {
                                               throttle: 20,
                                               realtime: true
                                             },
+                                            // Slider zoom Y-axis (NEW)
+                                            {
+                                              type: 'slider',
+                                              yAxisIndex: 0,
+                                              start: 0,
+                                              end: 100,
+                                              minSpan: 10,
+                                              maxSpan: 100,
+                                              zoomLock: false,
+                                              width: 20,
+                                              right: 5,
+                                              borderRadius: 8,
+                                              backgroundColor: '#f1f5f9',
+                                              borderColor: '#cbd5e1',
+                                              fillerColor: 'rgba(34,197,94,0.25)',
+                                              handleIcon: 'path://M0,0 L20,0 L20,6 L0,6 Z',
+                                              handleSize: '100%',
+                                              handleStyle: {
+                                                color: '#16a34a',
+                                                borderColor: '#15803d',
+                                                borderWidth: 1.5,
+                                                shadowBlur: 3,
+                                                shadowColor: 'rgba(0,0,0,0.2)',
+                                                borderRadius: 4
+                                              },
+                                              showDetail: false,
+                                              showDataShadow: false,
+                                              brushSelect: true,
+                                              textStyle: { color: '#1e293b', fontSize: 11 },
+                                              emphasis: {
+                                                handleStyle: {
+                                                  color: '#22c55e',
+                                                  shadowBlur: 6,
+                                                  shadowColor: 'rgba(34,197,94,0.4)'
+                                                }
+                                              },
+                                              throttle: 20,
+                                              realtime: true
+                                            }
                                           ],
                                           series
                                         } as any;
@@ -3188,6 +3579,7 @@ export default function ReportsPage() {
                                       };
                                     })()}
                                   />
+                                  </div>
                                 </div>
 
                                 {/* Backtracks lollipop chart in Path tab */}
@@ -3215,15 +3607,54 @@ export default function ReportsPage() {
                                       const total = vals.reduce((s,v)=>s+v,0);
                                       const maxLabelLen = labelsFull.reduce((m, s) => Math.max(m, String(s || '').length), 0);
                                       const estWidth = Math.min(320, Math.max(180, Math.round(maxLabelLen * 7)));
+                                      const maxVal = Math.max(...vals, 1);
                                       return {
                                         backgroundColor:'transparent',
-                                        grid:{ left: estWidth + 30, right: 30, top: 20, bottom: 40 },
-                                        xAxis:{ type:'value', axisLabel:{ color:'#334155', fontWeight:600 }, axisLine:{ lineStyle:{ color:'#94a3b8' } }, splitLine:{ show:true, lineStyle:{ color:'rgba(148,163,184,0.25)' } }, name:'Backtracks', nameLocation:'middle', nameGap:26, nameTextStyle:{ color:'#94a3b8', fontSize:12 } },
+                                        grid:{ left: estWidth + 30, right: 80, top: 20, bottom: 40 },
+                                        xAxis:{ type:'value', min: 0, axisLabel:{ color:'#334155', fontWeight:600 }, axisLine:{ lineStyle:{ color:'#94a3b8' } }, splitLine:{ show:true, lineStyle:{ color:'rgba(148,163,184,0.25)' } }, name:'Backtracks', nameLocation:'middle', nameGap:26, nameTextStyle:{ color:'#94a3b8', fontSize:12 } },
                                         yAxis:{ type:'category', data: labelsFull, axisLabel:{ color:'#334155', fontWeight:600, interval:0 as any, width: estWidth as any, overflow:'break' as any, lineHeight:16 as any, margin:12 as any }, axisLine:{ lineStyle:{ color:'#94a3b8' } }, axisTick:{ show:false } },
-                                        tooltip:{ trigger:'item', formatter:(p:any)=>{ const idx=p.dataIndex; const count=vals[idx]; const pct= total?((count/total)*100).toFixed(1):'0'; const name=labelsFull[idx]; return `${name}: ${count} backtrack${count===1?'':'s'} (${pct}%)`; } },
+                                        tooltip:{ trigger:'item', formatter:(p:any)=>{ const idx=p.dataIndex; const count=vals[idx]; const pct= total?((count/total)*100).toFixed(1):'0'; const name=labelsFull[idx]; return `${name}<br/>${count} backtrack${count===1?'':'s'} (${pct}%)`; } },
                                         series:[
-                                          { type:'bar', data: vals, barWidth:6, itemStyle:{ color:'#93a8e8' }, z:1, label:{ show:true, position:'right', color:'#0f172a', fontWeight:700, formatter:(p:any)=>String(p.value) } },
-                                          { type:'pictorialBar', data: vals, symbol:'circle', symbolSize:16, symbolPosition:'end', itemStyle:{ color:'#7ea0e6', borderColor:'#6b8ad6', borderWidth:1 }, z:2 }
+                                          {
+                                            type:'bar',
+                                            data: vals.map((v, i) => ({
+                                              value: v,
+                                              itemStyle: {
+                                                color: `rgba(147, 168, 232, ${0.4 + (v / maxVal) * 0.6})`
+                                              }
+                                            })),
+                                            barWidth:8,
+                                            z:1,
+                                            label:{
+                                              show:true,
+                                              position:'right',
+                                              color:'#0f172a',
+                                              fontWeight:700,
+                                              formatter:(p:any)=>{
+                                                const count = p.value;
+                                                const pct = total ? ((count/total)*100).toFixed(0) : '0';
+                                                return `${count} (${pct}%)`;
+                                              }
+                                            }
+                                          },
+                                          {
+                                            type:'pictorialBar',
+                                            data: vals,
+                                            symbol:'circle',
+                                            symbolSize:16,
+                                            symbolPosition:'end',
+                                            itemStyle:{ color:'#7ea0e6', borderColor:'#6b8ad6', borderWidth:2 },
+                                            z:2,
+                                            emphasis: {
+                                              itemStyle: {
+                                                color:'#5b7fc9',
+                                                borderColor:'#4a6db8',
+                                                borderWidth:2,
+                                                shadowBlur: 8,
+                                                shadowColor: 'rgba(107, 138, 214, 0.5)'
+                                              }
+                                            }
+                                          }
                                         ]
                                       } as any;
                                     })()}
