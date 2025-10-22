@@ -309,7 +309,7 @@ export default function CreateRunUnifiedPage() {
   async function startPreprocess(e: React.FormEvent) {
     e.preventDefault();
     if (useExisting && !selectedProjectId) { setShowErrorsChoose(true); return; }
-    if (!useExisting && (!page || !figmaUrl)) { setShowErrorsChoose(true); return; }
+    if (!useExisting && (!figmaUrl)) { setShowErrorsChoose(true); return; }
     setLoading(true);
     try {
       if (useExisting) {
@@ -593,9 +593,7 @@ export default function CreateRunUnifiedPage() {
               <label>Project Name</label>
               <input value={projectName} onChange={(e)=>setProjectName(e.target.value)} placeholder="My Project" />
               <label>Figma File URL</label>
-              <input value={figmaUrl} onChange={(e)=>setFigmaUrl(e.target.value)} required />
-              <label>Figma Page</label>
-              <input value={page} onChange={(e)=>setPage(e.target.value)} required />
+              <input value={figmaUrl} onChange={(e)=>setFigmaUrl(e.target.value)} required placeholder="Paste a Figma prototype or design link, e.g., https://figma.com/proto/... or /design/..." />
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
@@ -609,15 +607,17 @@ export default function CreateRunUnifiedPage() {
           {loadingRecent ? (
             <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
           ) : recent ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: recent.figma_page ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12, marginTop: 10 }}>
               <div>
                 <div className="muted">Name</div>
                 <div style={{ fontWeight: 700 }}>{recent.project_name || recent.name}</div>
               </div>
-              <div>
-                <div className="muted">Page</div>
-                <div>{recent.figma_page || '-'}</div>
-              </div>
+              {recent.figma_page && (
+                <div>
+                  <div className="muted">Page</div>
+                  <div>{recent.figma_page}</div>
+                </div>
+              )}
               <div>
                 <div className="muted">Status</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -2,8 +2,8 @@ import { NextRequest } from 'next/server';
 import path from 'path';
 
 export async function POST(req: NextRequest) {
-  const { page, figmaUrl, outDir, projectName } = await req.json();
-  if (!page || !figmaUrl) return new Response('Missing page or figmaUrl', { status: 400 });
+  const { page = '', figmaUrl, outDir, projectName } = await req.json();
+  if (!figmaUrl) return new Response('Missing figmaUrl', { status: 400 });
   const api = process.env.SPARROW_API || '';
   if (api) {
     // Use a timeout so the UI doesn't hang if backend is slow/unreachable

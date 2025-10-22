@@ -107,12 +107,9 @@ export default function PreprocessPage() {
         </label>
         <label>
           Figma File URL
-          <input value={url} onChange={e => setUrl(e.target.value)} required />
+          <input value={url} onChange={e => setUrl(e.target.value)} required placeholder="Paste a Figma prototype or design link, e.g., https://figma.com/proto/... or /design/..." />
         </label>
-        <label>
-          Figma Page
-          <input value={page} onChange={e => setPage(e.target.value)} required />
-        </label>
+        {/* Figma Page removed per request */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button className="btn-primary btn-sm" disabled={loading} type="submit">{loading ? 'Creating…' : 'Create Project'}</button>
         </div>
