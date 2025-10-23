@@ -31,7 +31,7 @@ from ..utils import write_json
 from ..models import PreprocessReq, TestsReq
 from ..auth_utils import get_current_user
 from ..db import fetchrow, execute
-from ..report_builder import build_report_pdf
+from ..report_builder import build_report_pdf, set_runs_path
 from ..ingest import _ingest_run_artifacts
 from ..persona_matcher import resolve_personas
 from ..metrics import get_run_metrics_public

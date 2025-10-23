@@ -866,15 +866,9 @@ export default function CreateRunUnifiedPage() {
                           Start Screen
                         </div>
                         <div
-                          onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = 'image/*';
-                            input.onchange = (e: any) => {
-                              const file = e.target?.files?.[0];
-                              if (file) updateTask(taskItem.id, { sourceFile: file });
-                            };
-                            input.click();
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            document.getElementById(`source-${taskItem.id}`)?.click();
                           }}
                           style={{
                             height: 160,
@@ -891,8 +885,21 @@ export default function CreateRunUnifiedPage() {
                           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3B82F6'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                         >
+                        <input
+                          type="file"
+                          id={`source-${taskItem.id}`}
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              updateTask(taskItem.id, { sourceFile: file });
+                              e.target.value = '';
+                            }
+                          }}
+                        />
                           {!taskItem.sourceFile && (
-                            <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                            <div style={{ textAlign: 'center', color: 'var(--muted)', pointerEvents: 'none' }}>
                               <div style={{ fontSize: 14, fontWeight: 600 }}>Click to upload</div>
                               <div style={{ fontSize: 12, marginTop: 4 }}>or drag & drop</div>
                             </div>
@@ -917,7 +924,11 @@ export default function CreateRunUnifiedPage() {
                               </div>
                               <button
                                 type="button"
-                                onClick={() => updateTask(taskItem.id, { sourceFile: null, sourcePreview: null })}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  updateTask(taskItem.id, { sourceFile: null, sourcePreview: null });
+                                }}
                                 style={{
                                   background: '#EF4444',
                                   color: '#FFFFFF',
@@ -942,15 +953,9 @@ export default function CreateRunUnifiedPage() {
                           Stop Screen (Task Complete)
                         </div>
                         <div
-                          onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = 'image/*';
-                            input.onchange = (e: any) => {
-                              const file = e.target?.files?.[0];
-                              if (file) updateTask(taskItem.id, { targetFile: file });
-                            };
-                            input.click();
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            document.getElementById(`target-${taskItem.id}`)?.click();
                           }}
                           style={{
                             height: 160,
@@ -967,8 +972,21 @@ export default function CreateRunUnifiedPage() {
                           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3B82F6'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                         >
+                        <input
+                          type="file"
+                          id={`target-${taskItem.id}`}
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              updateTask(taskItem.id, { targetFile: file });
+                              e.target.value = '';
+                            }
+                          }}
+                        />
                           {!taskItem.targetFile && (
-                            <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                            <div style={{ textAlign: 'center', color: 'var(--muted)', pointerEvents: 'none' }}>
                               <div style={{ fontSize: 14, fontWeight: 600 }}>Click to upload</div>
                               <div style={{ fontSize: 12, marginTop: 4 }}>or drag & drop</div>
                             </div>
@@ -993,7 +1011,11 @@ export default function CreateRunUnifiedPage() {
                               </div>
                               <button
                                 type="button"
-                                onClick={() => updateTask(taskItem.id, { targetFile: null, targetPreview: null })}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  updateTask(taskItem.id, { targetFile: null, targetPreview: null });
+                                }}
                                 style={{
                                   background: '#EF4444',
                                   color: '#FFFFFF',

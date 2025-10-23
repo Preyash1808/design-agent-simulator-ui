@@ -1531,56 +1531,54 @@ export default function ReportsPage() {
           role="dialog"
           aria-modal="true"
           onClick={()=>setShowDownloadModal(false)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.72)', zIndex:10070, display:'flex', alignItems:'center', justifyContent:'center', padding:'4vh 2vw' }}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:10070, display:'flex', alignItems:'center', justifyContent:'center', padding:'4vh 2vw' }}
         >
-          <div onClick={(e)=>e.stopPropagation()} style={{ width:'min(560px, 94vw)', background:'rgba(17,24,39,0.96)', border:'1px solid var(--border)', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,0.6)', padding:16 }}>
-            <h3 style={{ margin:0, fontSize:22 }}>Download Report</h3>
-            <div style={{ height: 8 }} />
-
-            {/* Segmented primary selector - available on both Overview and Persona tabs */}
-              <div role="tablist" aria-label="Download type" style={{ position:'relative', display:'inline-grid', gridTemplateColumns:'1fr 1fr 1fr', border:'1px solid var(--border)', borderRadius:999, overflow:'hidden', marginBottom:12 }}>
-                <span aria-hidden style={{ position:'absolute', top:2, bottom:2, left: dlTab==='report' ? 2 : (dlTab==='excel' ? 'calc(33.33% + 1px)' : 'calc(66.66% + 1px)'), width:'calc(33.33% - 4px)', background:'linear-gradient(180deg, rgba(147,197,253,0.25), rgba(147,197,253,0.12))', borderRadius:999, transition:'left .22s ease, background .22s ease' }} />
-                <button role="tab" aria-selected={dlTab==='report'} onClick={()=>{ setDlTab('report'); if (dlKind==='excel' || dlKind==='logs') setDlKind(recommendedKind); }} style={{ padding:'6px 16px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1 }}>Report</button>
-                <button role="tab" aria-selected={dlTab==='excel'} onClick={()=>{ setDlTab('excel'); setDlKind('excel'); }} style={{ padding:'6px 16px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1 }}>Personas</button>
-                <button role="tab" aria-selected={dlTab==='logs'} onClick={()=>{ setDlTab('logs'); setDlKind('logs'); }} style={{ padding:'6px 16px', background:'transparent', border:'none', color:'#e5e7eb', cursor:'pointer', zIndex:1 }}>Logs</button>
+          <div onClick={(e)=>e.stopPropagation()} style={{ width:'min(560px, 94vw)', background:'#FFFFFF', border:'1px solid #E5E7EB', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,0.15)', padding:24 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+              <h3 style={{ margin:0, fontSize:22, color:'#0F172A', fontWeight:700 }}>Export Report</h3>
+              <button onClick={()=>setShowDownloadModal(false)} style={{ background:'transparent', border:'none', cursor:'pointer', padding:4, display:'flex', alignItems:'center', color:'#64748B', fontSize:20 }}>✕</button>
             </div>
 
-            {dlTab==='excel' ? (
-              <div className="grid" style={{ gap:6, transition:'opacity .2s ease, transform .2s ease', opacity: dlAnim ? 1 : 0, transform: dlAnim ? 'translateY(0)' : 'translateY(6px)' }}>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)' }}>
-                  <input type="radio" name="dlKind" checked={true} readOnly />
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}><IconLayers width={14} height={14} /> Includes all personas + user‑level data for analysis.</span>
-              </label>
+            {/* Segmented Tab Navigation */}
+            <div role="tablist" aria-label="Download type" style={{ display:'inline-flex', background:'#F8F9FA', border:'1px solid #E5E7EB', borderRadius:8, padding:4, marginBottom:20 }}>
+              <button role="tab" aria-selected={dlTab==='report'} onClick={()=>{ setDlTab('report'); if (dlKind==='excel' || dlKind==='logs') setDlKind('full'); }} style={{ padding:'8px 20px', background: dlTab==='report' ? '#FFFFFF' : 'transparent', border:'none', borderRadius:6, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14, boxShadow: dlTab==='report' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition:'all 0.2s ease' }}>Report</button>
+              <button role="tab" aria-selected={dlTab==='excel'} onClick={()=>{ setDlTab('excel'); setDlKind('excel'); }} style={{ padding:'8px 20px', background: dlTab==='excel' ? '#FFFFFF' : 'transparent', border:'none', borderRadius:6, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14, boxShadow: dlTab==='excel' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition:'all 0.2s ease' }}>Personas</button>
+              <button role="tab" aria-selected={dlTab==='logs'} onClick={()=>{ setDlTab('logs'); setDlKind('logs'); }} style={{ padding:'8px 20px', background: dlTab==='logs' ? '#FFFFFF' : 'transparent', border:'none', borderRadius:6, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14, boxShadow: dlTab==='logs' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition:'all 0.2s ease' }}>Logs</button>
             </div>
-            ) : dlTab==='logs' ? (
-              <div className="grid" style={{ gap:6, transition:'opacity .2s ease, transform .2s ease', opacity: dlAnim ? 1 : 0, transform: dlAnim ? 'translateY(0)' : 'translateY(6px)' }}>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)' }}>
-                  <input type="radio" name="dlKind" checked={true} readOnly />
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}><IconDownload width={14} height={14} /> Downloads complete test run logs as a zip file.</span>
-              </label>
-            </div>
-            ) : (
-              <div role="radiogroup" aria-label="Report" className="grid" style={{ gap:6, transition:'opacity .2s ease, transform .2s ease', opacity: dlAnim ? 1 : 0, transform: dlAnim ? 'translateY(0)' : 'translateY(6px)' }}>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', cursor:'pointer' }}>
+
+            {/* Report tab content - only Full Report option */}
+            {dlTab==='report' && (
+              <div role="radiogroup" aria-label="Report" className="grid" style={{ gap:6 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, background:'#FAFAFA', border:'1px solid #E5E7EB', cursor:'pointer' }}>
                   <input type="radio" name="dlKind" checked={dlKind==='full'} onChange={()=>setDlKind('full')} />
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}><IconDownload width={14} height={14} /> Full Report (Overview + Persona Explorer)</span>
-                </label>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', cursor:'pointer' }}>
-                  <input type="radio" name="dlKind" checked={dlKind==='overview'} onChange={()=>setDlKind('overview')} />
-                  <span style={{ flex:1, display:'inline-flex', alignItems:'center', gap:8 }}><IconDownload width={14} height={14} /> Overview Report</span>
-                  {recommendedKind==='overview' && <span className="badge">Recommended</span>}
-                </label>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', cursor:'pointer' }}>
-                  <input type="radio" name="dlKind" checked={dlKind==='persona'} onChange={()=>setDlKind('persona')} />
-                  <span style={{ flex:1, display:'inline-flex', alignItems:'center', gap:8 }}><IconDownload width={14} height={14} /> Persona Explorer Report</span>
-                  {recommendedKind==='persona' && <span className="badge">Recommended</span>}
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> Full Report (Overview + Persona Explorer)</span>
                 </label>
               </div>
             )}
 
-            <div style={{ display:'flex', justifyContent:'flex-end', gap:10, marginTop:14 }}>
-              <button className="btn-ghost" onClick={()=>setShowDownloadModal(false)}>Cancel</button>
-              <button className="btn-ghost" onClick={()=>{ handleDownload(dlKind); setShowDownloadModal(false); }}>Download</button>
+            {/* Personas tab content */}
+            {dlTab==='excel' && (
+              <div className="grid" style={{ gap:6 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, background:'#FAFAFA', border:'1px solid #E5E7EB' }}>
+                  <input type="radio" name="dlKind" checked={true} readOnly />
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> Includes all personas + user‑level data for analysis.</span>
+                </label>
+              </div>
+            )}
+
+            {/* Logs tab content */}
+            {dlTab==='logs' && (
+              <div className="grid" style={{ gap:6 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, background:'#FAFAFA', border:'1px solid #E5E7EB' }}>
+                  <input type="radio" name="dlKind" checked={true} readOnly />
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> Downloads complete test run logs as a zip file.</span>
+                </label>
+              </div>
+            )}
+
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:12, marginTop:24 }}>
+              <button onClick={()=>setShowDownloadModal(false)} style={{ padding:'10px 20px', background:'#FFFFFF', border:'1px solid #E5E7EB', borderRadius:8, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14 }}>Cancel</button>
+              <button onClick={()=>{ handleDownload(dlKind); setShowDownloadModal(false); }} style={{ padding:'10px 24px', background:'#000000', color:'#FFFFFF', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500, fontSize:14 }}>Export</button>
             </div>
           </div>
         </div>
