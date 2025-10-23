@@ -669,46 +669,92 @@ def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overv
 
     # NEW SECTIONS: TEA, Recommendations, Sentiment Drift, Flow Insights
 
-    # 1. Think-Emotion-Action (TEA) Section - 6 unique TEAs with images (3 most negative, 3 most positive)
+    # 1. Think-Emotion-Action (TEA) Section - 3 unique screens with diverse sentiments
     try:
         if section in ('overview', 'full'):
+            import datetime
+            print(f"\n{'='*80}")
+            print(f"[TEA DEBUG {datetime.datetime.now()}] Starting TEA section generation")
+            print(f"{'='*80}")
+
             tea_thoughts = data.get('tea_thoughts') or []
             unique_teas = data.get('unique_teas') or []
+            print(f"[TEA DEBUG] Total tea_thoughts available: {len(tea_thoughts)}")
 
-            # Get TEAs with sentiment scores
+            # Get TEAs with sentiment scores and unique screens
             all_teas = []
-            for tea in tea_thoughts[:30]:  # Check first 30
+            seen_screens = set()
+
+            for tea in tea_thoughts[:50]:  # Check first 50 to get variety
                 try:
                     sentiment = float(tea.get('sentiment', 0))
-                    if sentiment != 0:  # Only include TEAs with sentiment
+                    img_src = tea.get('image', '')
+
+                    # Only include TEAs with sentiment and unique screens
+                    if sentiment != 0 and img_src and img_src not in seen_screens:
                         all_teas.append({
                             'thought': tea.get('thought', ''),
                             'emotion': tea.get('emotion', ''),
                             'action': tea.get('action', ''),
                             'sentiment': sentiment,
                             'screen': tea.get('screen', ''),
-                            'image': tea.get('image', '')
+                            'image': img_src
                         })
+                        seen_screens.add(img_src)
                 except:
                     continue
 
-            if len(all_teas) >= 6:
+            print(f"[TEA DEBUG] Unique TEAs collected: {len(all_teas)}")
+
+            if len(all_teas) >= 3:
+                print(f"[TEA DEBUG] ✓ Adding TEA section to PDF (3 unique screens)")
                 story.append(PageBreak())
                 story.append(Paragraph('<b>Think-Emotion-Action (TEA)</b>', styles['Heading2']))
-                story.append(Paragraph('<i>Displaying only six TEAs</i>', styles['Normal']))
+                story.append(Paragraph('<i>Displaying 3 unique user experiences</i>', styles['Normal']))
                 story.append(Spacer(1, 8))
+            else:
+                print(f"[TEA DEBUG] ✗ Not enough unique TEAs ({len(all_teas)} < 3), skipping section")
 
-                # Sort by sentiment
+                # Sort by sentiment to get range
                 all_teas_sorted = sorted(all_teas, key=lambda x: x['sentiment'])
 
-                # Get 3 most negative and 3 most positive
-                negative_teas = all_teas_sorted[:3]
-                positive_teas = all_teas_sorted[-3:][::-1]  # Reverse to get highest first
+                # Select 3 diverse TEAs: 1 most negative, 1 neutral/mid-range, 1 most positive
+                selected_teas = []
 
-                # Display negative TEAs
-                story.append(Paragraph('<b>Most Negative Experiences</b>', styles['Heading3']))
-                story.append(Spacer(1, 4))
-                for tea in negative_teas:
+                # Get most negative
+                if len(all_teas_sorted) > 0:
+                    selected_teas.append(all_teas_sorted[0])
+
+                # Get mid-range (neutral or mixed sentiment)
+                if len(all_teas_sorted) > 2:
+                    mid_idx = len(all_teas_sorted) // 2
+                    selected_teas.append(all_teas_sorted[mid_idx])
+
+                # Get most positive
+                if len(all_teas_sorted) > 1:
+                    selected_teas.append(all_teas_sorted[-1])
+
+                print(f"[TEA DEBUG] Selected {len(selected_teas)} TEAs for display")
+                for i, tea in enumerate(selected_teas, 1):
+                    print(f"[TEA DEBUG]   TEA {i}: sentiment={tea.get('sentiment'):.2f}, screen={tea.get('screen', 'N/A')[:40]}")
+
+                # Display TEAs without section headers, just colored backgrounds
+                for idx, tea in enumerate(selected_teas, 1):
+                    sentiment = tea.get('sentiment', 0)
+
+                    # Determine background color based on sentiment
+                    if sentiment < -0.3:
+                        bg_color = colors.HexColor('#fff5f5')  # Light red for negative
+                        color_name = "red (negative)"
+                    elif sentiment > 0.3:
+                        bg_color = colors.HexColor('#f0fdf4')  # Light green for positive
+                        color_name = "green (positive)"
+                    else:
+                        bg_color = colors.HexColor('#fefce8')  # Light yellow for neutral
+                        color_name = "yellow (neutral)"
+
+                    print(f"[TEA DEBUG] Displaying TEA {idx} with {color_name} background")
+
                     img_buf = fetch_img(tea.get('image'))
                     if img_buf:
                         try:
@@ -730,87 +776,168 @@ def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overv
                     row.setStyle(TableStyle([
                         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                         ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
-                        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fff5f5')),
+                        ('BACKGROUND', (0, 0), (-1, -1), bg_color),
                         ('LEFTPADDING', (0, 0), (-1, -1), 8),
                         ('RIGHTPADDING', (0, 0), (-1, -1), 8),
                         ('TOPPADDING', (0, 0), (-1, -1), 8),
                         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
                     ]))
                     story.append(row)
-                    story.append(Spacer(1, 6))
-
-                # Display positive TEAs
-                story.append(Spacer(1, 10))
-                story.append(Paragraph('<b>Most Positive Experiences</b>', styles['Heading3']))
-                story.append(Spacer(1, 4))
-                for tea in positive_teas:
-                    img_buf = fetch_img(tea.get('image'))
-                    if img_buf:
-                        try:
-                            img_buf.seek(0)
-                            img_el = RLImage(img_buf, width=60 * mm, height=40 * mm)
-                        except:
-                            img_el = Paragraph('No image', styles['Normal'])
-                    else:
-                        img_el = Paragraph('No image', styles['Normal'])
-
-                    text_content = f"<b>Think:</b> {sanitize_text(tea.get('thought', 'N/A'))}<br/>"
-                    text_content += f"<b>Emotion:</b> {sanitize_text(tea.get('emotion', 'N/A'))}<br/>"
-                    text_content += f"<b>Action:</b> {sanitize_text(tea.get('action', 'N/A'))}<br/>"
-                    text_content += f"<b>Sentiment:</b> {tea.get('sentiment', 0):.2f}"
-
-                    text_el = Paragraph(text_content, styles['ReportBody'])
-
-                    row = Table([[img_el, text_el]], colWidths=[65 * mm, 113 * mm])
-                    row.setStyle(TableStyle([
-                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
-                        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0fdf4')),
-                        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                        ('TOPPADDING', (0, 0), (-1, -1), 8),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                    ]))
-                    story.append(row)
-                    story.append(Spacer(1, 6))
+                    story.append(Spacer(1, 8))
     except Exception as e:
         print(f"Error adding TEA section: {e}")
         pass
 
-    # 2. Recommendations Section - 5 major recommendations with images
+    # 2. Recommendations Section - 6-8 most critical issues across 3 screens
     try:
         if section in ('overview', 'full'):
+            import datetime
+            print(f"\n{'='*80}")
+            print(f"[REC DEBUG {datetime.datetime.now()}] Starting Recommendations section generation")
+            print(f"{'='*80}")
+
             recommendations = data.get('derived_recommendations') or []
+            print(f"[REC DEBUG] Total recommendations: {len(recommendations)}")
             if recommendations and len(recommendations) > 0:
+                # Debug: print first few recommendations
+                for i, rec in enumerate(recommendations[:3]):
+                    print(f"[REC DEBUG] Rec {i}: count={rec.get('count')}, image={rec.get('image', '')[:50]}, text={rec.get('text', '')[:80]}")
+
                 story.append(PageBreak())
                 story.append(Paragraph('<b>Recommendations</b>', styles['Heading2']))
-                story.append(Paragraph('<i>Displaying only five Recommendations</i>', styles['Normal']))
+                story.append(Paragraph('<i>Displaying 6-8 most critical issues across 3 different screens</i>', styles['Normal']))
                 story.append(Spacer(1, 8))
+                print(f"[REC DEBUG] ✓ Added section header to PDF")
 
-                for idx, rec in enumerate(recommendations[:5], start=1):
-                    rec_text = sanitize_text(rec.get('text', rec.get('text_raw', 'No recommendation')))
-                    count = rec.get('count', 0)
+                # Helper function to clean recommendation text
+                def clean_rec_text(text):
+                    """Remove 'Observed X times' and similar patterns from recommendation text"""
+                    if not text:
+                        return ''
+                    import re
+                    original = text
+                    # Remove patterns like "Observed 2 times", "Observed X times", etc.
+                    text = re.sub(r'\s*Observed\s+\d+\s+times?\s*', '', text, flags=re.IGNORECASE)
+                    text = re.sub(r'\s*Observed\s+\w+\s+times?\s*', '', text, flags=re.IGNORECASE)
+                    # Remove trailing/leading whitespace
+                    cleaned = text.strip()
+                    if original != cleaned:
+                        print(f"[REC DEBUG] Cleaned text: '{original[:60]}...' -> '{cleaned[:60]}...'")
+                    return cleaned
+
+                # Step 1: Sort all recommendations by count (descending) to identify most critical
+                sorted_recs = sorted(recommendations, key=lambda x: int(x.get('count', 0)), reverse=True)
+                print(f"[REC DEBUG] Top 5 sorted by count: {[(r.get('count'), r.get('text', '')[:50]) for r in sorted_recs[:5]]}")
+
+                # Step 2: Select top 10-12 most critical issues as candidates
+                critical_candidates = sorted_recs[:12]
+
+                # Step 3: Ensure top 4 (or at least 3, minimum 2) are definitely included
+                must_include = sorted_recs[:4] if len(sorted_recs) >= 4 else sorted_recs[:max(2, len(sorted_recs))]
+
+                # Step 4: Group critical issues by screen
+                from collections import defaultdict, OrderedDict
+                screen_to_critical_issues = defaultdict(list)
+
+                for rec in critical_candidates:
                     img_src = rec.get('image', '')
+                    if img_src:
+                        screen_to_critical_issues[img_src].append(rec)
 
-                    # Fetch image
+                # Step 5: Select 3 screens using greedy algorithm to cover most critical issues
+                selected_screens_data = []
+                covered_issue_ids = set()
+
+                print(f"[DEBUG] Total unique screens with critical issues: {len(screen_to_critical_issues)}")
+                print(f"[DEBUG] Must include count: {len(must_include)}")
+
+                # Greedy selection: pick screens that cover the most uncovered critical issues
+                while len(selected_screens_data) < 3 and len(screen_to_critical_issues) > 0:
+                    best_screen = None
+                    best_score = 0
+                    best_img_src = None
+
+                    for img_src, screen_issues in screen_to_critical_issues.items():
+                        if img_src in [s['img_src'] for s in selected_screens_data]:
+                            continue
+
+                        # Count uncovered issues on this screen
+                        uncovered_issues = [r for r in screen_issues if id(r) not in covered_issue_ids]
+
+                        # Check if this screen has must-include issues
+                        has_must_include = any(id(r) in [id(m) for m in must_include] for r in uncovered_issues)
+
+                        # Score: number of uncovered issues + bonus for must-include
+                        score = len(uncovered_issues)
+                        if has_must_include:
+                            score += 100  # Heavy priority for must-include issues
+
+                        if score > best_score:
+                            best_score = score
+                            best_screen = uncovered_issues
+                            best_img_src = img_src
+
+                    if best_screen and best_img_src:
+                        selected_screens_data.append({
+                            'img_src': best_img_src,
+                            'issues': best_screen
+                        })
+                        # Mark issues as covered
+                        for r in best_screen:
+                            covered_issue_ids.add(id(r))
+                        print(f"[DEBUG] Selected screen {len(selected_screens_data)}: {best_img_src[:50]}, issues: {len(best_screen)}")
+                    else:
+                        break
+
+                print(f"[REC DEBUG] ✓ Final selected screens: {len(selected_screens_data)}")
+
+                # Step 6: Display each screen once with its 2-3 most critical issues
+                total_issues_displayed = 0
+
+                for screen_idx, screen_data in enumerate(selected_screens_data, start=1):
+                    print(f"[REC DEBUG] Processing screen {screen_idx}/{len(selected_screens_data)}")
+                    if total_issues_displayed >= 8:
+                        break
+
+                    img_src = screen_data['img_src']
+                    screen_issues = screen_data['issues']
+
+                    # Sort issues by criticality and take top 2-3
+                    screen_issues_sorted = sorted(screen_issues, key=lambda x: int(x.get('count', 0)), reverse=True)
+                    remaining_slots = min(3, 8 - total_issues_displayed)
+                    issues_to_display = screen_issues_sorted[:remaining_slots]
+
+                    if not issues_to_display:
+                        print(f"[REC DEBUG] Skipping screen {screen_idx} - no issues to display")
+                        continue
+
+                    print(f"[REC DEBUG] ✓ Displaying screen {screen_idx} with {len(issues_to_display)} issues")
+
+                    # Fetch and display screen image (only once per screen)
                     img_buf = fetch_img(img_src)
                     if img_buf:
                         try:
                             img_buf.seek(0)
-                            img_el = RLImage(img_buf, width=70 * mm, height=47 * mm)
+                            img_el = RLImage(img_buf, width=90 * mm, height=60 * mm)
                         except:
                             img_el = Paragraph('No image', styles['Normal'])
                     else:
                         img_el = Paragraph('No image', styles['Normal'])
 
-                    # Recommendation text
-                    text_content = f"<b>{idx}. {rec_text}</b><br/>"
-                    if count > 0:
-                        text_content += f"<i>Observed {count} times</i>"
+                    # Build list of recommendations for this screen (no observation count)
+                    issues_text = f"<b>Screen {screen_idx}:</b><br/><br/>"
+                    for issue_idx, rec in enumerate(issues_to_display, start=1):
+                        raw_text = rec.get('text', rec.get('text_raw', 'No recommendation'))
+                        cleaned_text = clean_rec_text(raw_text)
+                        sanitized_text = sanitize_text(cleaned_text)
+                        print(f"[REC DEBUG]   Issue {issue_idx}: '{sanitized_text[:60]}...'")
+                        issues_text += f"{issue_idx}. {sanitized_text}<br/><br/>"
+                        total_issues_displayed += 1
 
-                    text_el = Paragraph(text_content, styles['ReportBody'])
+                    text_el = Paragraph(issues_text, styles['ReportBody'])
 
-                    row = Table([[img_el, text_el]], colWidths=[75 * mm, 103 * mm])
+                    # Create table with image on left, recommendations on right
+                    row = Table([[img_el, text_el]], colWidths=[95 * mm, 83 * mm])
                     row.setStyle(TableStyle([
                         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                         ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
@@ -821,9 +948,14 @@ def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overv
                         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
                     ]))
                     story.append(row)
-                    story.append(Spacer(1, 8))
+                    story.append(Spacer(1, 12))
+
+                print(f"[REC DEBUG] ✓ Total issues displayed: {total_issues_displayed}")
+                print(f"{'='*80}\n")
     except Exception as e:
         print(f"Error adding Recommendations section: {e}")
+        import traceback
+        traceback.print_exc()
         pass
 
     # 3. Sentiment Drift Section - Charts for each persona with per-user lines

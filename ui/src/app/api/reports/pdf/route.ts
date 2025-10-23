@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     let auth = req.headers.get('authorization') || '';
     if (!auth && token) auth = `Bearer ${token}`;
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 15000);
+    timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes for PDF generation
     const qs = new URLSearchParams();
     if (section) qs.set('section', section);
     if (personaId) qs.set('personaId', personaId);
