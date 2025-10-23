@@ -221,11 +221,10 @@ export default function ReportsPage() {
   const [sevVisible, setSevVisible] = useState<Record<string, boolean>>({ S1: true, S2: true, S3: true, S4: true, S5: true });
   // Global Download modal
   const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [dlKind, setDlKind] = useState<'overview'|'persona'|'full'|'excel'|'logs'>('overview');
+  const [dlKind, setDlKind] = useState<'overview'|'persona'|'full'|'excel'|'logs'>('full');
   const [dlTab, setDlTab] = useState<'report'|'excel'|'logs'>('report');
   // Persona density toggle
   const [personaDensity, setPersonaDensity] = useState<'comfortable'|'compact'>('comfortable');
-  const recommendedKind = useMemo(() => (tab === 'persona' ? 'persona' : 'overview'), [tab]);
   const SEVERITY_COLORS: Record<string, string> = useMemo(() => ({
     S1: '#9CA3AF',
     S2: '#818CF8',
@@ -1561,7 +1560,7 @@ export default function ReportsPage() {
               <div className="grid" style={{ gap:6 }}>
                 <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, background:'#FAFAFA', border:'1px solid #E5E7EB' }}>
                   <input type="radio" name="dlKind" checked={true} readOnly />
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> Includes all personas + user‑level data for analysis.</span>
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> All personas with connected user data</span>
                 </label>
               </div>
             )}
@@ -1647,7 +1646,7 @@ export default function ReportsPage() {
               <TabButton label="Persona Explorer" active={tab==='persona'} onClick={() => setTab('persona')} />
             </div>
             <button
-              onClick={() => { setDlTab('report'); setDlKind(recommendedKind); setShowDownloadModal(true); setShowDlMenu(false); }}
+              onClick={() => { setDlTab('report'); setDlKind('full'); setShowDownloadModal(true); setShowDlMenu(false); }}
               style={{
                 padding: '8px 16px',
                 borderRadius: 8,
