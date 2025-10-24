@@ -232,8 +232,6 @@ export default function ReportsPage() {
     S4: '#34D399',
     S5: '#F59E0B',
   }), []);
-  const [dlAnim, setDlAnim] = useState(false);
-  useEffect(() => { setDlAnim(false); const id = setTimeout(()=>setDlAnim(true), 10); return () => clearTimeout(id); }, [dlTab]);
   const [showDlMenu, setShowDlMenu] = useState(false);
   const dlRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -893,6 +891,14 @@ export default function ReportsPage() {
   const [selectedThemeSort, setSelectedThemeSort] = React.useState<'clarity' | 'confidence' | 'recovery' | 'delight' | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Set<string>>(new Set());
 
+  // Initialize all recommendation sections as collapsed by default
+  React.useEffect(() => {
+    if (recommendationsByScreen.length > 0) {
+      const allSectionKeys = new Set(recommendationsByScreen.map((g, i) => `${g.screenId || i}`));
+      setCollapsedSections(allSectionKeys);
+    }
+  }, [recommendationsByScreen]);
+
   // Map persona names to chip CSS classes
   function getPersonaChipClass(personaName: string): string {
     const name = String(personaName || '').toLowerCase();
@@ -1524,8 +1530,29 @@ export default function ReportsPage() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Reports</h2>
+        <button
+          onClick={() => { setDlTab('report'); setDlKind('full'); setShowDownloadModal(true); setShowDlMenu(false); }}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 8,
+            border: 'none',
+            background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+            color: '#FFFFFF',
+            fontWeight: 600,
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            whiteSpace: 'nowrap'
+          }}
+          disabled={!selectedGoal}
+        >
+          <IconDownload width={16} height={16} />
+          Export
+        </button>
       </div>
 
       {showDownloadModal && (
@@ -1533,54 +1560,55 @@ export default function ReportsPage() {
           role="dialog"
           aria-modal="true"
           onClick={()=>setShowDownloadModal(false)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:10070, display:'flex', alignItems:'center', justifyContent:'center', padding:'4vh 2vw' }}
+          style={{ position:'fixed', inset:0, background:'var(--overlay)', backdropFilter:'blur(4px)', zIndex:10070, display:'flex', alignItems:'center', justifyContent:'center', padding:'4vh 2vw' }}
         >
-          <div onClick={(e)=>e.stopPropagation()} style={{ width:'min(560px, 94vw)', background:'#FFFFFF', border:'1px solid #E5E7EB', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,0.15)', padding:24 }}>
+          <div onClick={(e)=>e.stopPropagation()} style={{ width:'min(560px, 94vw)', background:'#FFFFFF', border:'1px solid var(--border)', borderRadius:16, boxShadow:'0 20px 60px rgba(15,23,42,0.25), 0 8px 24px rgba(15,23,42,0.15)', padding:24 }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
-              <h3 style={{ margin:0, fontSize:22, color:'#0F172A', fontWeight:700 }}>Export Report</h3>
-              <button onClick={()=>setShowDownloadModal(false)} style={{ background:'transparent', border:'none', cursor:'pointer', padding:4, display:'flex', alignItems:'center', color:'#64748B', fontSize:20 }}>✕</button>
+              <h3 style={{ margin:0, fontSize:22, fontWeight:800, color:'var(--text)' }}>Export Report</h3>
+              <button
+                onClick={()=>setShowDownloadModal(false)}
+                style={{ width:32, height:32, display:'grid', placeItems:'center', border:'1px solid var(--border)', borderRadius:8, background:'#FFFFFF', color:'var(--muted)', cursor:'pointer', transition:'all 0.15s ease' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--elev-2)'; e.currentTarget.style.color = 'var(--text)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = 'var(--muted)'; }}
+                aria-label="Close"
+              >
+                <IconX width={16} height={16} />
+              </button>
             </div>
 
-            {/* Segmented Tab Navigation */}
-            <div role="tablist" aria-label="Download type" style={{ display:'inline-flex', background:'#F8F9FA', border:'1px solid #E5E7EB', borderRadius:8, padding:4, marginBottom:20 }}>
-              <button role="tab" aria-selected={dlTab==='report'} onClick={()=>{ setDlTab('report'); if (dlKind==='excel' || dlKind==='logs') setDlKind('full'); }} style={{ padding:'8px 20px', background: dlTab==='report' ? '#FFFFFF' : 'transparent', border:'none', borderRadius:6, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14, boxShadow: dlTab==='report' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition:'all 0.2s ease' }}>Report</button>
-              <button role="tab" aria-selected={dlTab==='excel'} onClick={()=>{ setDlTab('excel'); setDlKind('excel'); }} style={{ padding:'8px 20px', background: dlTab==='excel' ? '#FFFFFF' : 'transparent', border:'none', borderRadius:6, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14, boxShadow: dlTab==='excel' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition:'all 0.2s ease' }}>Personas</button>
-              <button role="tab" aria-selected={dlTab==='logs'} onClick={()=>{ setDlTab('logs'); setDlKind('logs'); }} style={{ padding:'8px 20px', background: dlTab==='logs' ? '#FFFFFF' : 'transparent', border:'none', borderRadius:6, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14, boxShadow: dlTab==='logs' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition:'all 0.2s ease' }}>Logs</button>
+            {/* Segmented primary selector */}
+            <div role="tablist" aria-label="Download type" style={{ display:'flex', gap:0, background:'var(--elev-2)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', marginBottom:16, padding:4, width:'fit-content' }}>
+              <button role="tab" aria-selected={dlTab==='report'} onClick={()=>{ setDlTab('report'); if (dlKind==='excel' || dlKind==='logs') setDlKind('full'); }} style={{ padding:'8px 24px', background:dlTab==='report'?'#FFFFFF':'transparent', border:'none', borderRadius:10, color:dlTab==='report'?'var(--text)':'var(--muted)', fontWeight:dlTab==='report'?600:500, cursor:'pointer', boxShadow:dlTab==='report'?'0 1px 2px rgba(15,23,42,0.1)':'none', fontSize:14 }}>Report</button>
+              <button role="tab" aria-selected={dlTab==='excel'} onClick={()=>{ setDlTab('excel'); setDlKind('excel'); }} style={{ padding:'8px 24px', background:dlTab==='excel'?'#FFFFFF':'transparent', border:'none', borderRadius:10, color:dlTab==='excel'?'var(--text)':'var(--muted)', fontWeight:dlTab==='excel'?600:500, cursor:'pointer', boxShadow:dlTab==='excel'?'0 1px 2px rgba(15,23,42,0.1)':'none', fontSize:14 }}>Personas</button>
+              <button role="tab" aria-selected={dlTab==='logs'} onClick={()=>{ setDlTab('logs'); setDlKind('logs'); }} style={{ padding:'8px 24px', background:dlTab==='logs'?'#FFFFFF':'transparent', border:'none', borderRadius:10, color:dlTab==='logs'?'var(--text)':'var(--muted)', fontWeight:dlTab==='logs'?600:500, cursor:'pointer', boxShadow:dlTab==='logs'?'0 1px 2px rgba(15,23,42,0.1)':'none', fontSize:14 }}>Logs</button>
             </div>
 
-            {/* Report tab content - only Full Report option */}
-            {dlTab==='report' && (
-              <div role="radiogroup" aria-label="Report" className="grid" style={{ gap:6 }}>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, background:'#FAFAFA', border:'1px solid #E5E7EB', cursor:'pointer' }}>
-                  <input type="radio" name="dlKind" checked={dlKind==='full'} onChange={()=>setDlKind('full')} />
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> Full Report (Overview + Persona Explorer)</span>
+            {dlTab==='excel' ? (
+              <div className="grid" style={{ gap:8 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:10, background:'var(--elev-2)', border:'1px solid var(--border)' }}>
+                  <input type="radio" name="dlKind" checked={true} readOnly style={{ accentColor:'#0F172A' }} />
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'var(--text)' }}><IconLayers width={16} height={16} /> Includes all personas + user‑level data for analysis.</span>
+                </label>
+              </div>
+            ) : dlTab==='logs' ? (
+              <div className="grid" style={{ gap:8 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:10, background:'var(--elev-2)', border:'1px solid var(--border)' }}>
+                  <input type="radio" name="dlKind" checked={true} readOnly style={{ accentColor:'#0F172A' }} />
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'var(--text)' }}><IconDownload width={16} height={16} /> Downloads complete test run logs as a zip file.</span>
+                </label>
+              </div>
+            ) : (
+              <div role="radiogroup" aria-label="Report" className="grid" style={{ gap:8 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:10, background:dlKind==='full'?'var(--elev-2)':'#FFFFFF', border:'1px solid var(--border)', cursor:'pointer', transition:'all 0.15s ease' }} onMouseEnter={(e) => { if(dlKind!=='full') e.currentTarget.style.background = 'var(--elev-2)'; }} onMouseLeave={(e) => { if(dlKind!=='full') e.currentTarget.style.background = '#FFFFFF'; }}>
+                  <input type="radio" name="dlKind" checked={dlKind==='full'} onChange={()=>setDlKind('full')} style={{ accentColor:'#0F172A' }} />
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'var(--text)' }}><IconDownload width={16} height={16} /> Full Report (Overview + Persona Explorer)</span>
                 </label>
               </div>
             )}
 
-            {/* Personas tab content */}
-            {dlTab==='excel' && (
-              <div className="grid" style={{ gap:6 }}>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, background:'#FAFAFA', border:'1px solid #E5E7EB' }}>
-                  <input type="radio" name="dlKind" checked={true} readOnly />
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> All personas with connected user data</span>
-                </label>
-              </div>
-            )}
-
-            {/* Logs tab content */}
-            {dlTab==='logs' && (
-              <div className="grid" style={{ gap:6 }}>
-                <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, background:'#FAFAFA', border:'1px solid #E5E7EB' }}>
-                  <input type="radio" name="dlKind" checked={true} readOnly />
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#0F172A', fontSize:14 }}><IconDownload width={16} height={16} /> Downloads complete test run logs as a zip file.</span>
-                </label>
-              </div>
-            )}
-
-            <div style={{ display:'flex', justifyContent:'flex-end', gap:12, marginTop:24 }}>
-              <button onClick={()=>setShowDownloadModal(false)} style={{ padding:'10px 20px', background:'#FFFFFF', border:'1px solid #E5E7EB', borderRadius:8, color:'#0F172A', cursor:'pointer', fontWeight:500, fontSize:14 }}>Cancel</button>
-              <button onClick={()=>{ handleDownload(dlKind); setShowDownloadModal(false); }} style={{ padding:'10px 24px', background:'#000000', color:'#FFFFFF', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500, fontSize:14 }}>Export</button>
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:10, marginTop:20, paddingTop:20, borderTop:'1px solid var(--border)' }}>
+              <button className="btn-ghost" onClick={()=>setShowDownloadModal(false)}>Cancel</button>
+              <button className="btn-primary" onClick={()=>{ handleDownload(dlKind); setShowDownloadModal(false); }}>Export</button>
             </div>
           </div>
         </div>
@@ -1642,31 +1670,12 @@ export default function ReportsPage() {
         </div>
       ) : (
         <div ref={reportRef} className="grid" style={{ marginTop: 16 }}>
-          {/* Tabs + Download button */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 4, padding: 4, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10 }}>
+          {/* Tabs */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 4, padding: 4, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, width: 'fit-content' }}>
               <TabButton label="Overview" active={tab==='overview'} onClick={() => setTab('overview')} />
               <TabButton label="Persona Explorer" active={tab==='persona'} onClick={() => setTab('persona')} />
             </div>
-            <button
-              onClick={() => { setDlTab('report'); setDlKind('full'); setShowDownloadModal(true); setShowDlMenu(false); }}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 8,
-                border: 'none',
-                background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
-                color: '#FFFFFF',
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              <IconDownload width={16} height={16} />
-              Download
-            </button>
           </div>
 
           {tab === 'overview' && (
@@ -1680,26 +1689,18 @@ export default function ReportsPage() {
             <>
             <div className="tile">
               <h4>Overview</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(240px, 1fr))', gap: 16, marginTop: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 10 }}>
+                {/* First Row */}
                 <Stat label="Completion Rate" subtitle="Share of personas who reached the goal" value={kpis.completionRatePct != null ? `${kpis.completionRatePct}%` : '-'} />
-                <Stat label="Early-Exit Rate" subtitle="Stopped before finishing" value={kpis.earlyExitPct != null ? `${kpis.earlyExitPct}%` : '-'} />
                 <Stat label="Backtrack Rate" subtitle="Share of steps that reversed course" value={kpis.backtrackRatePct != null ? `${kpis.backtrackRatePct}%` : '-'} />
-                <Stat label="Ideal Steps" subtitle="Shortest path steps" value={kpis.idealSteps != null ? String(kpis.idealSteps) : '—'} />
                 <Stat label="Avg Steps (Completed)" subtitle="Average steps among completed runs" value={kpis.avgSteps != null ? (Number.isInteger(kpis.avgSteps) ? String(kpis.avgSteps) : (Math.round(Number(kpis.avgSteps) * 100) / 100).toFixed(2)) : '-'} />
-                <Stat label="Hesitation (s/Step)" subtitle="Average wait per step" value={kpis.hesitationSecPerStep != null ? String(kpis.hesitationSecPerStep) : '-'} />
 
+                {/* Second Row */}
                 {/* Friction Index - Special Card */}
                 <div style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 16, padding: 20, minHeight: 120, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div style={{ fontSize: 12, fontWeight: 500, color: '#92400E', marginBottom: 8 }}>Friction Index</div>
                   <div style={{ fontSize: 30, fontWeight: 600, color: '#78350F', marginBottom: 4 }}>{kpis.frictionIndex != null ? String(kpis.frictionIndex) : '-'}</div>
                   <div style={{ fontSize: 12, color: '#92400E' }}>Overall friction score</div>
-                </div>
-
-                {/* Decision Volatility - Special Card */}
-                <div style={{ background: '#FECACA', border: '1px solid #FCA5A5', borderRadius: 16, padding: 20, minHeight: 120, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: '#991B1B', marginBottom: 8 }}>Decision Volatility</div>
-                  <div style={{ fontSize: 30, fontWeight: 600, color: '#7F1D1D', marginBottom: 4 }}>{kpis.decisionVolatility != null ? `${kpis.decisionVolatility}%` : '—'}</div>
-                  <div style={{ fontSize: 12, color: '#991B1B' }}>Detours per step</div>
                 </div>
               </div>
               {(metrics as any)?.run_metrics?.report_csv_url && (
@@ -2428,15 +2429,10 @@ export default function ReportsPage() {
                         onClick={(e) => { e.stopPropagation(); setOpenPersonaId(p.persona_id); loadPersonaDetail(String(runQuery || lastRequested), p.persona_id); }}
                         className="persona-card persona-card--clickable"
                         style={{ textAlign: 'left' as any }}>
-                        {/* Top-right badges */}
-                        <div className="persona-card__badges">
-                          <span className="pc-chip">{p.completion_pct}%</span>
-                        </div>
-
                         {/* Title */}
                         <h3 className="persona-card__title">{p.persona_name || `Persona #${p.persona_id}`}</h3>
 
-                        {/* 2x2 Metrics Grid */}
+                        {/* Metrics Grid */}
                         <div className="persona-metrics">
                           <div className="pc-metric">
                             <div className="pc-metric__label">AVG STEPS</div>
@@ -2449,12 +2445,6 @@ export default function ReportsPage() {
                           <div className="pc-metric">
                             <div className="pc-metric__label">FRICTION %</div>
                             <div className="pc-metric__value">{p.friction_pct}%</div>
-                          </div>
-                          <div className="pc-metric">
-                            <div className="pc-metric__label">DRIFT</div>
-                            <div className="pc-metric__value">
-                              {typeof p.drift === 'number' ? (p.drift > 0 ? `+${p.drift.toFixed(2)}` : p.drift.toFixed(2)) : 'N/A'}
-                            </div>
                           </div>
                         </div>
 
