@@ -591,7 +591,10 @@ export default function ReportsPage() {
         const stepsRaw = Array.isArray(it?.steps)
           ? it.steps
           : (Array.isArray(it?.sequence) ? it.sequence : (typeof it?.path === 'string' ? String(it.path).split('>').map((s: string) => ({ screen_name: s.trim() })) : []));
-        const steps = (stepsRaw || []).map((s: any) => ({ screen_name: String(s?.screen_name || s?.screen || s?.frame_name || '') }));
+        const steps = (stepsRaw || []).map((s: any) => ({
+          screen_name: String(s?.screen_name || s?.screen || s?.frame_name || ''),
+          screen_id: s?.screen_id || s?.id || undefined
+        }));
         const rawName = it?.firstName ?? it?.fullName ?? it?.name ?? it?.user_name ?? it?.username ?? it?.user ?? it?.userId;
         const name = pickFirstName(rawName) || `User ${idx + 1}`;
         return { name, steps };
@@ -3038,6 +3041,12 @@ export default function ReportsPage() {
                                         i < predefinedColors.length ? predefinedColors[i] : hslToHex((360 * (i - predefinedColors.length)) / Math.max(1, seriesCount - predefinedColors.length), 50, 50)
                                       );
 
+                                      // Helper to strip screen_id from screen key
+                                      const stripScreenId = (screenKey: string): string => {
+                                        const lastUnderscore = screenKey.lastIndexOf('_');
+                                        return lastUnderscore > 0 ? screenKey.substring(0, lastUnderscore) : screenKey;
+                                      };
+
                                       // Show custom tooltip on mouseover
                                       chartInstance.on('mouseover', 'series', (params: any) => {
                                         const journey = visibleJourneys[params.seriesIndex];
@@ -3047,16 +3056,19 @@ export default function ReportsPage() {
                                         const prevStep = currentStepIdx > 0 ? steps[currentStepIdx - 1] : null;
                                         const nextStep = currentStepIdx < steps.length - 1 ? steps[currentStepIdx + 1] : null;
 
+                                        // Strip screen_id from display
+                                        const currentScreenName = stripScreenId(params.data[1]);
+
                                         let pathStr = '<div style="padding: 4px 0;">';
                                         if (prevStep) pathStr += `<span style="opacity: 0.6;">${String(prevStep?.screen_name || prevStep?.screen || '').substring(0, 20)}</span> → `;
-                                        pathStr += `<span style="font-weight: 700; color: #60A5FA;">${params.data[1]}</span>`;
+                                        pathStr += `<span style="font-weight: 700; color: #60A5FA;">${currentScreenName}</span>`;
                                         if (nextStep) pathStr += ` → <span style="opacity: 0.6;">${String(nextStep?.screen_name || nextStep?.screen || '').substring(0, 20)}</span>`;
                                         pathStr += '</div>';
 
                                         const content = `<div style="min-width: 200px;">
                                           <div style="font-weight: 700; margin-bottom: 6px; color: ${colors[params.seriesIndex]};">${params.seriesName}</div>
                                           <div style="font-size: 12px; margin-bottom: 4px;"><span style="opacity: 0.7;">Step:</span> <b>${stepNumber}</b> of ${steps.length}</div>
-                                          <div style="font-size: 12px; margin-bottom: 6px;"><span style="opacity: 0.7;">Screen:</span> <b>${params.data[1]}</b></div>
+                                          <div style="font-size: 12px; margin-bottom: 6px;"><span style="opacity: 0.7;">Screen:</span> <b>${currentScreenName}</b></div>
                                           <div style="font-size: 11px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px; margin-top: 4px;">
                                             ${pathStr}
                                           </div>
@@ -3086,36 +3098,45 @@ export default function ReportsPage() {
                                       // Prefer real per-user journeys when available; fall back to aggregated paths
                                       const journeys = journeysData;
                                       if (Array.isArray(journeys) && journeys.length > 0) {
-                                        // Build screen set and max steps, track frequency for sorting
+                                        // Build screen set using screen_name_screen_id as unique identifier
+                                        // This allows duplicate names to appear separately on y-axis
                                         const screensSet = new Set<string>();
                                         const screenFrequency = new Map<string, number>();
                                         const screenPositions = new Map<string, number[]>(); // Track step positions for each screen
                                         const transitions = new Map<string, Map<string, number>>(); // Track screen-to-screen transitions
                                         let maxSteps = 0;
 
+                                        // Helper function to create unique screen key
+                                        const getScreenKey = (s: any): string => {
+                                          const name = String(s?.screen_name || s?.screen || '');
+                                          const id = String(s?.screen_id || s?.id || '');
+                                          // Use name_id format if ID exists, otherwise just name
+                                          return id ? `${name}_${id}` : name;
+                                        };
+
                                         journeys.forEach((j: any) => {
                                           const steps = Array.isArray(j?.steps) ? j.steps : [];
                                           maxSteps = Math.max(maxSteps, steps.length);
                                           steps.forEach((s: any, stepIndex: number) => {
-                                            const n = String(s?.screen_name || s?.screen || '');
-                                            if (n) {
-                                              screensSet.add(n);
-                                              screenFrequency.set(n, (screenFrequency.get(n) || 0) + 1);
+                                            const screenKey = getScreenKey(s);
+                                            if (screenKey) {
+                                              screensSet.add(screenKey);
+                                              screenFrequency.set(screenKey, (screenFrequency.get(screenKey) || 0) + 1);
                                               // Track positions where this screen appears
-                                              if (!screenPositions.has(n)) {
-                                                screenPositions.set(n, []);
+                                              if (!screenPositions.has(screenKey)) {
+                                                screenPositions.set(screenKey, []);
                                               }
-                                              screenPositions.get(n)!.push(stepIndex);
+                                              screenPositions.get(screenKey)!.push(stepIndex);
 
                                               // Track transitions to next screen
                                               if (stepIndex < steps.length - 1) {
-                                                const nextScreen = String(steps[stepIndex + 1]?.screen_name || steps[stepIndex + 1]?.screen || '');
-                                                if (nextScreen) {
-                                                  if (!transitions.has(n)) {
-                                                    transitions.set(n, new Map());
+                                                const nextScreenKey = getScreenKey(steps[stepIndex + 1]);
+                                                if (nextScreenKey) {
+                                                  if (!transitions.has(screenKey)) {
+                                                    transitions.set(screenKey, new Map());
                                                   }
-                                                  const screenTransitions = transitions.get(n)!;
-                                                  screenTransitions.set(nextScreen, (screenTransitions.get(nextScreen) || 0) + 1);
+                                                  const screenTransitions = transitions.get(screenKey)!;
+                                                  screenTransitions.set(nextScreenKey, (screenTransitions.get(nextScreenKey) || 0) + 1);
                                                 }
                                               }
                                             }
@@ -3259,8 +3280,10 @@ export default function ReportsPage() {
                                             } else {
                                               // No more connections, add remaining arbitrarily
                                               const next = remaining.values().next().value;
-                                              ordered.push(next);
-                                              remaining.delete(next);
+                                              if (next) {
+                                                ordered.push(next);
+                                                remaining.delete(next);
+                                              }
                                             }
                                           }
 
@@ -3295,7 +3318,11 @@ export default function ReportsPage() {
 
                                         const series = visibleJourneys.map((j: any, idx: number) => {
                                           const steps = Array.isArray(j?.steps) ? j.steps : [];
-                                          const data = steps.map((s: any, i: number) => [i, String(s?.screen_name || s?.screen || '')]);
+                                          // Map each step to its unique screen key (name_id)
+                                          const data = steps.map((s: any, i: number) => {
+                                            const screenKey = getScreenKey(s);
+                                            return [i, screenKey];
+                                          });
 
                                           // Visual hierarchy: more steps = more prominent (assuming longer = more complete)
                                           const frequency = pathFrequency[idx];
@@ -3392,13 +3419,23 @@ export default function ReportsPage() {
                                               width: 130,
                                               overflow: 'truncate',
                                               formatter: (v: string) => {
-                                                if (v.length > 22) {
+                                                // Strip out _<screen_id> suffix if present
+                                                // Format is: screen_name_screen_id
+                                                let displayName = v;
+                                                const lastUnderscore = v.lastIndexOf('_');
+                                                if (lastUnderscore > 0) {
+                                                  // Extract just the screen name part
+                                                  displayName = v.substring(0, lastUnderscore);
+                                                }
+
+                                                // Apply truncation if needed
+                                                if (displayName.length > 22) {
                                                   // Smart truncation at word boundary
-                                                  const truncated = v.substring(0, 20);
+                                                  const truncated = displayName.substring(0, 20);
                                                   const lastSpace = truncated.lastIndexOf(' ');
                                                   return lastSpace > 10 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
                                                 }
-                                                return v;
+                                                return displayName;
                                               },
                                               margin: 8
                                             },

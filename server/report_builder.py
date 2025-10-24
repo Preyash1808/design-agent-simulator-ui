@@ -1010,8 +1010,31 @@ def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overv
                 story.append(Paragraph('<b>Flow Insights</b>', styles['Heading2']))
                 story.append(Spacer(1, 8))
 
-                # Create bar chart of top paths
-                path_names = [sanitize_text(p.get('path', f'Path {i+1}'))[:40] for i, p in enumerate(paths[:6])]
+                # Helper function to strip screen_id from screen_name_screen_id format
+                def strip_screen_id(screen_key: str) -> str:
+                    """Extract screen name from screen_name_screen_id format"""
+                    last_underscore = screen_key.rfind('_')
+                    if last_underscore > 0:
+                        return screen_key[:last_underscore]
+                    return screen_key
+
+                # Process paths - screens may be in format "screen_name_screen_id"
+                # Display only screen_name but keep full key for uniqueness
+                processed_path_names: List[str] = []
+
+                for i, p in enumerate(paths[:6]):
+                    path_str = p.get('path', f'Path {i+1}')
+                    # Split path into individual screens (assuming '>' separator)
+                    screen_keys = [s.strip() for s in path_str.split('>')]
+
+                    # Strip screen_id from each screen for display
+                    display_screens = [strip_screen_id(sk) for sk in screen_keys if sk]
+
+                    # Reconstruct path with display names only
+                    display_path = ' > '.join(display_screens)
+                    processed_path_names.append(sanitize_text(display_path)[:60])
+
+                path_names = processed_path_names
                 path_shares = [p.get('sharePct', 0) for p in paths[:6]]
 
                 if path_names:
@@ -1041,6 +1064,8 @@ def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overv
                     story.append(Spacer(1, 10))
     except Exception as e:
         print(f"Error adding Flow Insights section: {e}")
+        import traceback
+        traceback.print_exc()
         pass
 
     # Build document (with safe fallback in case any flowable fails)
