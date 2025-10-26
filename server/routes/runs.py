@@ -2025,6 +2025,7 @@ async def start_preprocess(req: PreprocessReq, authorization: Optional[str] = He
                     'figma_url': req.figma_url,
                     'figma_page': req.page,
                     'status': 'INPROGRESS',
+                    'kind': 'figma',
                     'run_dir': str(run_dir)
                 }, returning="representation").execute()  # ✅ FIXED: no .select() in Python client
 
@@ -2034,10 +2035,10 @@ async def start_preprocess(req: PreprocessReq, authorization: Optional[str] = He
             else:
                 log_message("Inserting project row into Postgres...")
                 row = await fetchrow(
-                    'insert into projects (id, owner_id, name, figma_url, figma_page, status) '
-                    'values ($1,$2,$3,$4,$5,$6) returning id',
+                    'insert into projects (id, owner_id, name, figma_url, figma_page, status, kind) '
+                    'values ($1,$2,$3,$4,$5,$6,$7) returning id',
                     candidate_db_project_id, owner_id,
-                    req.project_name or req.page, req.figma_url, req.page, 'INITIATED'
+                    req.project_name or req.page, req.figma_url, req.page, 'INITIATED', 'figma'
                 )
                 db_project_id = str(row['id']) if row else None
                 if db_project_id:

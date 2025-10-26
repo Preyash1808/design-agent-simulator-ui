@@ -87,6 +87,9 @@ import { IconQuestionCircle, IconActivity, IconDownload, IconLayers, IconX } fro
 import FlowSankey from '../../components/flow/FlowSankey';
 import PathShareTrend from '../../components/flow/PathShareTrend';
 import PathRankList from '../../components/flow/PathRankList';
+import { JourneyTab } from '../../components/webapp/JourneyTab';
+import { ScreenshotsTab } from '../../components/webapp/ScreenshotsTab';
+import { WebAppMetricsTab } from '../../components/webapp/WebAppMetricsTab';
 // import EmotionMix from '../../components/EmotionMix';
 
 function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -210,7 +213,10 @@ export default function ReportsPage() {
   const [lastRequested, setLastRequested] = useState<string>("");
   const [goals, setGoals] = useState<Array<{ id: string; goal: string; run_dir?: string; task_id?: number|null; task_name?: string|null }>>([]);
   const [selectedGoal, setSelectedGoal] = useState("");
-  const [tab, setTab] = useState<'overview'|'persona'>('overview');
+  const [tab, setTab] = useState<'overview'|'persona'|'journey'|'screenshots'|'metrics'>('overview');
+  const [testType, setTestType] = useState<'figma'|'webapp'>('figma');
+  const [journeyData, setJourneyData] = useState<any>(null);
+  const [journeyLoading, setJourneyLoading] = useState(false);
   const [fbFilter, setFbFilter] = useState<string>("");
   const [fbLimit, setFbLimit] = useState<number>(8);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
@@ -692,6 +698,48 @@ export default function ReportsPage() {
       setLastRequested(runId);
       const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
       if (!runId) { setLoading(false); return; }
+
+      // Detect test type by checking if this is a webapp test
+      // Web app tests have run_dir starting with 'webapp_test_'
+      try {
+        const statusR = await fetch(`/api/status?run_id=${encodeURIComponent(runId)}`, {
+          headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          cache: 'no-store'
+        });
+        if (statusR.ok) {
+          const statusData = await statusR.json();
+          const runItem = (statusData.items || []).find((x: any) => String(x.id) === String(runId));
+          const runDir = String(runItem?.run_dir || '');
+          const isWebApp = runDir.startsWith('webapp_test_');
+          setTestType(isWebApp ? 'webapp' : 'figma');
+
+          // If webapp test, load journey data instead of metrics
+          if (isWebApp) {
+            setJourneyLoading(true);
+            try {
+              const journeyR = await fetch(`/api/journey?runId=${encodeURIComponent(runDir)}`, {
+                headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                cache: 'no-store'
+              });
+              if (journeyR.ok) {
+                const journeyDataResult = await journeyR.json();
+                setJourneyData(journeyDataResult);
+                setTab('journey'); // Auto-switch to journey tab
+              }
+            } catch (e) {
+              console.error('Failed to load journey data:', e);
+            } finally {
+              setJourneyLoading(false);
+              setLoading(false);
+              setBootLoading(false);
+            }
+            return; // Skip loading regular metrics for webapp tests
+          }
+        }
+      } catch (e) {
+        console.error('Failed to detect test type:', e);
+      }
+
       // Try public endpoint first (has enriched fallbacks), then internal
       const endpoints = ['/api/metrics_public', '/api/metrics'];
       let data: any = null;
@@ -1673,12 +1721,32 @@ export default function ReportsPage() {
           {/* Tabs */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 4, padding: 4, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, width: 'fit-content' }}>
-              <TabButton label="Overview" active={tab==='overview'} onClick={() => setTab('overview')} />
-              <TabButton label="Persona Explorer" active={tab==='persona'} onClick={() => setTab('persona')} />
+              {testType === 'figma' ? (
+                <>
+                  <TabButton label="Overview" active={tab==='overview'} onClick={() => setTab('overview')} />
+                  <TabButton label="Persona Explorer" active={tab==='persona'} onClick={() => setTab('persona')} />
+                </>
+              ) : (
+                <>
+                  <TabButton label="Journey" active={tab==='journey'} onClick={() => setTab('journey')} />
+                  <TabButton label="Screenshots" active={tab==='screenshots'} onClick={() => setTab('screenshots')} />
+                  <TabButton label="Metrics" active={tab==='metrics'} onClick={() => setTab('metrics')} />
+                </>
+              )}
             </div>
           </div>
 
-          {tab === 'overview' && (
+          {/* Web App Test Results */}
+          {testType === 'webapp' && journeyData && (
+            <>
+              {tab === 'journey' && <JourneyTab journeyData={journeyData} runId={lastRequested} />}
+              {tab === 'screenshots' && <ScreenshotsTab journeyData={journeyData} runId={lastRequested} />}
+              {tab === 'metrics' && <WebAppMetricsTab journeyData={journeyData} />}
+            </>
+          )}
+
+          {/* Figma Test Results */}
+          {testType === 'figma' && tab === 'overview' && (
           <>
             {/* moved link up to tabs row; keeping spacing compact here */}
             {!metrics ? (

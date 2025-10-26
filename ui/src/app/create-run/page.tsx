@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { IconPlus } from '../../components/icons';
 
-type Project = { id: string; name: string; status: string; created_at?: string; updated_at?: string };
+type Project = { id: string; name: string; status: string; created_at?: string; updated_at?: string; test_type?: string };
 type Persona = { id: string; name: string; bio?: string };
 type Run = {
   id: string;
@@ -261,12 +261,19 @@ export default function LaunchTestPage() {
           const chipClass = isReady ? 'chip-success' : isProcessing ? 'chip-pending' : 'chip-neutral';
           const statusLabel = isReady ? 'Ready' : isProcessing ? 'Processing…' : status || 'Unknown';
 
+          const testType = project.test_type || 'figma';
+          const testTypeLabel = testType === 'webapp' ? 'Web App' : 'Figma';
+          const testTypeIcon = testType === 'webapp' ? '🌐' : '🎨';
+
           return (
             <div key={project.id} className="row">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <a className="text-slate-900 font-medium truncate hover:underline">{project.name}</a>
                   <span className={`chip ${chipClass}`}>{statusLabel}</span>
+                  <span className="chip chip-neutral" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                    {testTypeIcon} {testTypeLabel}
+                  </span>
                 </div>
                 <div className="meta mt-0.5">Updated {timeAgo(project.updated_at || project.created_at)}</div>
               </div>

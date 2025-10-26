@@ -16,6 +16,15 @@ export default function CreateRunUnifiedPage() {
   const [projectName, setProjectName] = useState('');
   const [page, setPage] = useState('');
   const [figmaUrl, setFigmaUrl] = useState('');
+  const [testType, setTestType] = useState<'figma'|'webapp'>('figma');
+  const [appUrl, setAppUrl] = useState('');
+  const [maxMinutes, setMaxMinutes] = useState(2);
+  const [taskName, setTaskName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [expectedUrl, setExpectedUrl] = useState('');
+  const [requiredElements, setRequiredElements] = useState('');
+  const [excludedElements, setExcludedElements] = useState('');
   const [step, setStep] = useState<'choose'|'preprocess'|'tests'|'personas'|'done'>('choose');
   const [loading, setLoading] = useState(false);
   const [preprocessInfo, setPreprocessInfo] = useState<any|null>(null);
@@ -67,6 +76,37 @@ export default function CreateRunUnifiedPage() {
   const unifiedEnabled = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_UNIFIED_FLOW === '1' || process.env.NEXT_PUBLIC_UNIFIED_FLOW === 'true') : true;
   const STATE_KEY = 'sparrow_launch_state_v1';
   const restoredRef = useRef(false);
+  const previousTestTypeRef = useRef<'figma'|'webapp'>(testType);
+
+  // Reset form when testType changes (toggle between Web App and Design File)
+  useEffect(() => {
+    if (previousTestTypeRef.current !== testType) {
+      // Reset to initial state when toggle changes
+      setStep('choose');
+      setProjectName('');
+      setFigmaUrl('');
+      setPage('');
+      setAppUrl('');
+      setEmail('');
+      setPassword('');
+      setGoal('');
+      setTaskName('');
+      setExpectedUrl('');
+      setRequiredElements('');
+      setExcludedElements('');
+      setSourceFile(null);
+      setTargetFile(null);
+      setTasks([
+        { id: crypto.randomUUID(), taskName: '', task: '', sourceFile: null, targetFile: null, sourcePreview: null, targetPreview: null }
+      ]);
+      setShowErrorsChoose(false);
+      setShowErrorsTests(false);
+      setPreprocessInfo(null);
+
+      // Update the ref to current testType
+      previousTestTypeRef.current = testType;
+    }
+  }, [testType]);
 
   useEffect(() => {
     // Restore any saved state for this login session; then compute defaults if not restored
@@ -97,7 +137,18 @@ export default function CreateRunUnifiedPage() {
         const data = await r.json();
         const items: any[] = Array.isArray(data?.items) ? data.items : [];
         const projectsOnly = items.filter(it => String(it.type).toLowerCase()==='project');
-        const completed = projectsOnly.filter((p:any)=> String(p.status||'').toUpperCase()==='COMPLETED');
+        // Filter by kind based on testType: figma (including null for backward compatibility) or webapp
+        const matchingKind = projectsOnly.filter((p:any)=> {
+          const kind = String(p.kind||'').toLowerCase();
+          if (testType === 'figma') {
+            // For figma, show projects with kind='figma' OR kind=null (backward compatibility)
+            return kind === 'figma' || kind === '';
+          } else {
+            // For webapp, only show projects with kind='webapp'
+            return kind === 'webapp';
+          }
+        });
+        const completed = matchingKind.filter((p:any)=> String(p.status||'').toUpperCase()==='COMPLETED');
         const completedIds = completed.map((p:any)=> String(p.project_id || p.id || ''))
                                      .filter((s:string)=> !!s);
         setCompletedProjectIds(completedIds);
@@ -109,6 +160,9 @@ export default function CreateRunUnifiedPage() {
           const pid = String(lastCompleted?.project_id || lastCompleted?.id || '');
           setDefaultCompletedProjectId(pid);
           if (pid) setSelectedProjectId(pid);
+        } else {
+          // No completed projects - start with new project
+          setUseExisting(false);
         }
       } catch {}
       setInitReady(true);
@@ -178,6 +232,49 @@ export default function CreateRunUnifiedPage() {
     })();
   }, []);
 
+  // Reload projects when testType changes
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const r = await fetch('/api/status?attach_signed_urls=0', { headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+        const data = await r.json();
+        const items: any[] = Array.isArray(data?.items) ? data.items : [];
+        const projectsOnly = items.filter(it => String(it.type).toLowerCase()==='project');
+        // Filter by kind based on testType: figma (including null for backward compatibility) or webapp
+        const matchingKind = projectsOnly.filter((p:any)=> {
+          const kind = String(p.kind||'').toLowerCase();
+          if (testType === 'figma') {
+            // For figma, show projects with kind='figma' OR kind=null (backward compatibility)
+            return kind === 'figma' || kind === '';
+          } else {
+            // For webapp, only show projects with kind='webapp'
+            return kind === 'webapp';
+          }
+        });
+        const completed = matchingKind.filter((p:any)=> String(p.status||'').toUpperCase()==='COMPLETED');
+        const completedIds = completed.map((p:any)=> String(p.project_id || p.id || ''))
+                                     .filter((s:string)=> !!s);
+        setCompletedProjectIds(completedIds);
+        if (completed.length > 0) {
+          // Always set to use existing if there are completed projects
+          if (!useExisting) setUseExisting(true);
+          // Always update the default and selected project when testType changes
+          completed.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
+          const lastCompleted = completed[0];
+          const pid = String(lastCompleted?.project_id || lastCompleted?.id || '');
+          setDefaultCompletedProjectId(pid);
+          if (pid) setSelectedProjectId(pid);
+        } else {
+          // No completed projects for this type - clear selection and switch to new project
+          setDefaultCompletedProjectId('');
+          setSelectedProjectId('');
+          setUseExisting(false);
+        }
+      } catch {}
+    })();
+  }, [testType]);
+
   // Persist state for current login session
   useEffect(() => {
     try {
@@ -231,9 +328,20 @@ export default function CreateRunUnifiedPage() {
         const data = await r.json();
         const items: any[] = Array.isArray(data?.items) ? data.items : [];
         const projectsOnly = items.filter((it:any) => String(it.type).toLowerCase() === 'project');
+        // Filter by kind based on testType: figma (including null for backward compatibility) or webapp
+        const matchingKind = projectsOnly.filter((p:any)=> {
+          const kind = String(p.kind||'').toLowerCase();
+          if (testType === 'figma') {
+            // For figma, show projects with kind='figma' OR kind=null (backward compatibility)
+            return kind === 'figma' || kind === '';
+          } else {
+            // For webapp, only show projects with kind='webapp'
+            return kind === 'webapp';
+          }
+        });
         // Pick latest by updated_at or created_at, regardless of status
-        projectsOnly.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
-        const proj = projectsOnly[0] || null;
+        matchingKind.sort((a:any,b:any)=> new Date(b.updated_at||b.created_at||0).getTime() - new Date(a.updated_at||a.created_at||0).getTime());
+        const proj = matchingKind[0] || null;
         setRecent(proj);
         if (proj && String(proj.status).toUpperCase() !== 'COMPLETED') {
           const started = proj.created_at ? new Date(proj.created_at).getTime() : (proj.updated_at ? new Date(proj.updated_at).getTime() : null);
@@ -247,7 +355,7 @@ export default function CreateRunUnifiedPage() {
     }
     setLoadingRecent(false);
   }
-  useEffect(() => { loadRecent(); }, []);
+  useEffect(() => { loadRecent(); }, [testType]);
   // Fallback: always show UI within 700ms even if network is slow
   useEffect(() => { const t = setTimeout(() => setBootLoading(false), 700); return () => clearTimeout(t); }, []);
   
@@ -310,13 +418,34 @@ export default function CreateRunUnifiedPage() {
   async function startPreprocess(e: React.FormEvent) {
     e.preventDefault();
     if (useExisting && !selectedProjectId) { setShowErrorsChoose(true); return; }
-    if (!useExisting && (!figmaUrl)) { setShowErrorsChoose(true); return; }
+    if (!useExisting && testType === 'figma' && (!figmaUrl || !projectName)) { setShowErrorsChoose(true); return; }
+    if (!useExisting && testType === 'webapp' && (!appUrl || !projectName)) { setShowErrorsChoose(true); return; }
     setLoading(true);
     try {
       if (useExisting) {
         // Skip to tests step directly; ensure project is ready via status API
         setStep('tests');
+      } else if (testType === 'webapp') {
+        // Web app testing: Create project (preprocess) then move to test setup
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const r = await fetch('/api/preprocess-webapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            projectName: projectName || 'Web App Project',
+            appUrl,
+            email: email || undefined,
+            password: password || undefined,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data?.detail || data?.error || 'Failed to create web app project');
+
+        // Store project info and move to tests step
+        setPreprocessInfo(data);
+        setStep('tests');
       } else {
+        // Figma testing: preprocess as usual
         const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
         const r = await fetch('/api/preprocess', {
           method: 'POST',
@@ -395,88 +524,146 @@ export default function CreateRunUnifiedPage() {
 
   async function launchRun(personaConfigs: { personaId: number; traits: string; users: number }[], exclusiveUsers: boolean) {
     console.log('[launchRun] Called with personaConfigs:', personaConfigs, 'exclusiveUsers:', exclusiveUsers);
-    console.log('[launchRun] Current state - tasks:', tasks);
-    console.log('[launchRun] Old state - goal:', goal, 'sourceFile:', sourceFile, 'targetFile:', targetFile);
-
-    // Use tasks array if available (new system), otherwise fall back to old goal/sourceFile/targetFile
-    let taskToUse = null;
-    let goalToUse = '';
-    let sourceToUse = null;
-    let targetToUse = null;
-
-    if (tasks && tasks.length > 0) {
-      // Find first valid task with all required fields
-      taskToUse = tasks.find(t => t.taskName.trim() && t.task.trim() && t.sourceFile && t.targetFile);
-      if (taskToUse) {
-        goalToUse = taskToUse.task;
-        sourceToUse = taskToUse.sourceFile;
-        targetToUse = taskToUse.targetFile;
-        console.log('[launchRun] Using task from tasks array:', taskToUse);
-        setActiveTaskName(String(taskToUse.taskName || ''));
-      }
-    }
-
-    // Fallback to old system if tasks not available
-    if (!goalToUse && goal && sourceFile && targetFile) {
-      goalToUse = goal;
-      sourceToUse = sourceFile;
-      targetToUse = targetFile;
-      console.log('[launchRun] Using old goal/sourceFile/targetFile');
-    }
-
-    if (!goalToUse || !sourceToUse || !targetToUse) {
-      console.error('[launchRun] Missing required fields - goalToUse:', goalToUse, 'sourceToUse:', sourceToUse, 'targetToUse:', targetToUse);
-      alert('Please configure the test task and screens before starting the test.');
-      return;
-    }
+    console.log('[launchRun] testType:', testType);
 
     setLoading(true);
     try {
-      const form = new FormData();
-      const pid = useExisting ? selectedProjectId : String(preprocessInfo?.db?.project_id || '');
-      if (!pid) throw new Error('Missing projectId');
-      form.set('projectId', pid);
-      form.set('goal', goalToUse); // maps to Task Description
-      try { if (taskToUse?.taskName) form.set('taskName', String(taskToUse.taskName)); } catch {}
-      form.set('maxMinutes', String(2));
-      form.set('source', sourceToUse);
-      form.set('target', targetToUse);
-      try {
-        form.set('personas', JSON.stringify(personaConfigs || []));
-        form.set('exclusiveUsers', String(!!exclusiveUsers));
-      } catch {}
+      const projectId = useExisting ? selectedProjectId : String(preprocessInfo?.db?.project_id || '');
+      if (!projectId) throw new Error('Missing projectId');
 
-      const xhr = new XMLHttpRequest();
-      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-      const p = new Promise<{status:number, body:any}>((resolve, reject) => {
-        xhr.upload.onprogress = (evt) => {
-          if (evt.lengthComputable) {
-            setUploadPct(Math.round((evt.loaded/evt.total)*100));
-          }
-        };
-        xhr.onerror = () => reject(new Error('network error'));
-        xhr.onload = () => {
-          try { resolve({ status: xhr.status, body: JSON.parse(xhr.responseText||'{}') }); }
-          catch { resolve({ status: xhr.status, body: {} }); }
-        };
-      });
-      xhr.open('POST', '/api/tests');
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.send(form);
-      const res = await p;
-      if (res.status < 200 || res.status >= 300) throw new Error('tests start failed');
-      const rid = String(res.body?.db?.run_id || res.body?.test_run_id || '');
-      if (rid) {
-        console.log('[LAUNCH DEBUG] Setting activeRunId:', rid);
-        setActiveRunId(rid);
+      // Handle Web App Tests (Phase 4: Multi-persona support)
+      if (testType === 'webapp') {
+        if (!goal) {
+          alert('Please configure the test goal before starting.');
+          setLoading(false);
+          return;
+        }
+
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+
+        // Build personas array for Phase 4
+        const personas = personaConfigs.map(p => ({
+          personaId: p.personaId,
+          name: p.name || `Persona ${p.personaId}`,  // Fixed: use short name, not full traits
+          traits: p.traits,
+          users: p.users
+        }));
+
+        const r = await fetch('/api/web-app-tests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            projectId,
+            goal,
+            maxMinutes: 5,
+            taskName: taskName || undefined,
+            expectedUrl: expectedUrl || undefined,
+            requiredElements: requiredElements ? requiredElements.split(',').map(e => e.trim()).filter(Boolean) : undefined,
+            excludedElements: excludedElements ? excludedElements.split(',').map(e => e.trim()).filter(Boolean) : undefined,
+            personas: personas.length > 0 ? personas : undefined
+          }),
+        });
+
+        const data = await r.json();
+        if (!r.ok) throw new Error(data?.detail || data?.error || 'web app test failed');
+
+        // Handle batch response (Phase 4) - Single run_id architecture
+        const rid = String(data?.run_id || '');
+        if (rid) {
+          setActiveRunId(rid);
+          setActiveTaskName(taskName || goal);
+        }
+
+        const now = Date.now();
+        runStartRef.current = now;
+        setRunStartMs(now);
+        setRunElapsedSec(0);
+        setActiveRunStatus('INPROGRESS');
+        if (data?.log) setActiveRunLog(data.log);
+        setStep('done');
       }
-      // initialize timer immediately
-      const now = Date.now();
-      console.log('[LAUNCH DEBUG] Setting runStartRef.current to:', now);
-      runStartRef.current = now;
-      setRunStartMs(now);
-      setRunElapsedSec(0);
-      setStep('done');
+      // Handle Figma Tests (existing logic)
+      else {
+        console.log('[launchRun] Current state - tasks:', tasks);
+        console.log('[launchRun] Old state - goal:', goal, 'sourceFile:', sourceFile, 'targetFile:', targetFile);
+
+        // Use tasks array if available (new system), otherwise fall back to old goal/sourceFile/targetFile
+        let taskToUse = null;
+        let goalToUse = '';
+        let sourceToUse = null;
+        let targetToUse = null;
+
+        if (tasks && tasks.length > 0) {
+          // Find first valid task with all required fields
+          taskToUse = tasks.find(t => t.taskName.trim() && t.task.trim() && t.sourceFile && t.targetFile);
+          if (taskToUse) {
+            goalToUse = taskToUse.task;
+            sourceToUse = taskToUse.sourceFile;
+            targetToUse = taskToUse.targetFile;
+            console.log('[launchRun] Using task from tasks array:', taskToUse);
+            setActiveTaskName(String(taskToUse.taskName || ''));
+          }
+        }
+
+        // Fallback to old system if tasks not available
+        if (!goalToUse && goal && sourceFile && targetFile) {
+          goalToUse = goal;
+          sourceToUse = sourceFile;
+          targetToUse = targetFile;
+          console.log('[launchRun] Using old goal/sourceFile/targetFile');
+        }
+
+        if (!goalToUse || !sourceToUse || !targetToUse) {
+          console.error('[launchRun] Missing required fields - goalToUse:', goalToUse, 'sourceToUse:', sourceToUse, 'targetToUse:', targetToUse);
+          alert('Please configure the test task and screens before starting the test.');
+          setLoading(false);
+          return;
+        }
+
+        const form = new FormData();
+        form.set('projectId', projectId);
+        form.set('goal', goalToUse); // maps to Task Description
+        try { if (taskToUse?.taskName) form.set('taskName', String(taskToUse.taskName)); } catch {}
+        form.set('maxMinutes', String(2));
+        form.set('source', sourceToUse);
+        form.set('target', targetToUse);
+        try {
+          form.set('personas', JSON.stringify(personaConfigs || []));
+          form.set('exclusiveUsers', String(!!exclusiveUsers));
+        } catch {}
+
+        const xhr = new XMLHttpRequest();
+        const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const p = new Promise<{status:number, body:any}>((resolve, reject) => {
+          xhr.upload.onprogress = (evt) => {
+            if (evt.lengthComputable) {
+              setUploadPct(Math.round((evt.loaded/evt.total)*100));
+            }
+          };
+          xhr.onerror = () => reject(new Error('network error'));
+          xhr.onload = () => {
+            try { resolve({ status: xhr.status, body: JSON.parse(xhr.responseText||'{}') }); }
+            catch { resolve({ status: xhr.status, body: {} }); }
+          };
+        });
+        xhr.open('POST', '/api/tests');
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.send(form);
+        const res = await p;
+        if (res.status < 200 || res.status >= 300) throw new Error('tests start failed');
+        const rid = String(res.body?.db?.run_id || res.body?.test_run_id || '');
+        if (rid) {
+          console.log('[LAUNCH DEBUG] Setting activeRunId:', rid);
+          setActiveRunId(rid);
+        }
+        // initialize timer immediately
+        const now = Date.now();
+        console.log('[LAUNCH DEBUG] Setting runStartRef.current to:', now);
+        runStartRef.current = now;
+        setRunStartMs(now);
+        setRunElapsedSec(0);
+        setStep('done');
+      }
     } catch (err:any) {
       alert(String(err?.message || err || 'Failed'));
     }
@@ -593,13 +780,35 @@ export default function CreateRunUnifiedPage() {
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
               <label>Project Name</label>
-              <input value={projectName} onChange={(e)=>setProjectName(e.target.value)} placeholder="My Project" />
-              <label>Figma File URL</label>
-              <input value={figmaUrl} onChange={(e)=>setFigmaUrl(e.target.value)} required placeholder="Paste a Figma prototype or design link, e.g., https://figma.com/proto/... or /design/..." />
+              <input value={projectName} onChange={(e)=>setProjectName(e.target.value)} placeholder="My Project" required />
+
+              {testType === 'figma' ? (
+                <>
+                  <label>Figma File URL</label>
+                  <input value={figmaUrl} onChange={(e)=>setFigmaUrl(e.target.value)} required placeholder="Paste a Figma prototype or design link, e.g., https://figma.com/proto/... or /design/..." />
+                </>
+              ) : (
+                <>
+                  <label>App URL</label>
+                  <input value={appUrl} onChange={(e)=>setAppUrl(e.target.value)} required placeholder="https://example.com" type="url" />
+
+                  <label>Email (optional)</label>
+                  <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="user@example.com" type="email" />
+
+                  <label>Password (optional)</label>
+                  <input value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Enter password if login required" type="password" />
+                </>
+              )}
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-            <button className="btn-primary" disabled={loading} type="submit">{loading ? 'Working...' : (useExisting ? 'Continue' : 'Create project')}</button>
+            <button
+              className="btn-primary"
+              disabled={loading || (useExisting && (!selectedProjectId || projects.length === 0))}
+              type="submit"
+            >
+              {loading ? 'Working...' : (useExisting ? 'Continue' : 'Create project')}
+            </button>
           </div>
         </form>
 
@@ -713,6 +922,221 @@ export default function CreateRunUnifiedPage() {
   }
 
   function renderTests() {
+    // Web App Test Setup
+    if (testType === 'webapp') {
+      return (
+        <div className="tile">
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (!goal) { setShowErrorsTests(true); return; }
+            // Navigate to persona selection instead of starting test immediately
+            setStep('personas');
+          }} className={showErrorsTests ? 'show-errors' : undefined}>
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ margin: 0, marginBottom: 8, fontSize: 20, fontWeight: 700 }}>Test Setup</h3>
+              <p style={{ margin: 0, color: '#64748B', fontSize: 14 }}>
+                Configure your web app test with a goal and success validation criteria
+              </p>
+            </div>
+
+            {/* Task Name */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
+                Task Name
+              </label>
+              <input
+                value={taskName}
+                onChange={(e)=>setTaskName(e.target.value)}
+                placeholder="e.g., pricing-navigation"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  fontSize: 14,
+                  border: '1px solid #E2E8F0',
+                  borderRadius: 8,
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#3B82F6'}
+                onBlur={(e) => e.target.style.borderColor = '#E2E8F0'}
+              />
+            </div>
+
+            {/* Task Description */}
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
+                Task Description <span style={{ color: '#DC2626' }}>*</span>
+              </label>
+              <textarea
+                value={goal}
+                onChange={(e)=>setGoal(e.target.value)}
+                required
+                placeholder="Describe what the AI should accomplish (e.g., Navigate to the pricing page and find the enterprise plan)"
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  fontSize: 14,
+                  border: '1px solid #E2E8F0',
+                  borderRadius: 8,
+                  resize: 'vertical',
+                  lineHeight: 1.5,
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#3B82F6'}
+                onBlur={(e) => e.target.style.borderColor = '#E2E8F0'}
+              />
+            </div>
+
+            {/* Acceptance Criteria */}
+            <div style={{
+              marginTop: 24,
+              padding: 20,
+              background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)',
+              border: '2px solid #E2E8F0',
+              borderRadius: 12,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0F172A' }}>
+                  Acceptance Criteria
+                </div>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: '#10B981',
+                  background: '#D1FAE5',
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #A7F3D0',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Optional
+                </span>
+              </div>
+
+              {/* Smart Completion Info Banner */}
+              <div style={{
+                marginBottom: 16,
+                padding: 12,
+                background: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                borderRadius: 8,
+                display: 'flex',
+                gap: 10,
+                alignItems: 'start'
+              }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>💡</span>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: '#1E40AF' }}>
+                  <strong>Recommended:</strong> Leave these fields empty to use <strong>Smart Completion</strong>.
+                  The AI will automatically detect when your goal is achieved based on URL and page content.
+                  Only fill these fields if you need explicit validation for complex scenarios.
+                </div>
+              </div>
+
+              {/* Expected URL Path */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                  Expected URL Path
+                </label>
+                <input
+                  value={expectedUrl}
+                  onChange={(e)=>setExpectedUrl(e.target.value)}
+                  placeholder="💡 URL should contain this text e.g., /reports"
+                  style={{
+                    width: '100%',
+                    background: '#FFFFFF',
+                    padding: '9px 12px',
+                    fontSize: 13,
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 6,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3B82F6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#CBD5E1';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              {/* Must Contain */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                  Must Contain <span style={{ color: '#64748B', fontWeight: 400 }}>(comma-separated)</span>
+                </label>
+                <input
+                  value={requiredElements}
+                  onChange={(e)=>setRequiredElements(e.target.value)}
+                  placeholder="✓ Text elements that must appear e.g., Reports, Overview"
+                  style={{
+                    width: '100%',
+                    background: '#FFFFFF',
+                    padding: '9px 12px',
+                    fontSize: 13,
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 6,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3B82F6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#CBD5E1';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              {/* Must NOT Contain */}
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                  Must NOT Contain <span style={{ color: '#64748B', fontWeight: 400 }}>(comma-separated)</span>
+                </label>
+                <input
+                  value={excludedElements}
+                  onChange={(e)=>setExcludedElements(e.target.value)}
+                  placeholder="✗ Text that should NOT be on page e.g., Error, Failed to load"
+                  style={{
+                    width: '100%',
+                    background: '#FFFFFF',
+                    padding: '9px 12px',
+                    fontSize: 13,
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 6,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3B82F6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#CBD5E1';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+              <button type="button" className="btn-ghost" onClick={() => setStep('choose')} disabled={loading}>
+                Back
+              </button>
+              <button className="btn-primary" disabled={loading} type="submit">
+                Continue to Personas
+              </button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    // Figma Test Setup (existing code)
     const validateTasks = () => {
       return tasks.every(t => t.taskName.trim() && t.task.trim() && t.sourceFile && t.targetFile);
     };
@@ -1155,7 +1579,68 @@ export default function CreateRunUnifiedPage() {
         renderEmptyState()
       ) : (
         <>
-          <div className="dash-header">Launch Test</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div className="dash-header" style={{ marginBottom: 0 }}>Launch Test</div>
+            <div style={{
+              display: 'inline-flex',
+              background: '#F8FAFC',
+              borderRadius: 10,
+              padding: 4,
+              border: '1px solid #E2E8F0'
+            }}>
+              <button
+                type="button"
+                onClick={() => setTestType('figma')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: 8,
+                  background: testType === 'figma' ? '#FFFFFF' : 'transparent',
+                  cursor: 'pointer',
+                  fontWeight: testType === 'figma' ? 600 : 500,
+                  fontSize: 14,
+                  color: testType === 'figma' ? '#0F172A' : '#64748B',
+                  transition: 'all 0.2s ease',
+                  boxShadow: testType === 'figma' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/>
+                  <path d="M7 7h.01"/>
+                </svg>
+                Design File
+              </button>
+              <button
+                type="button"
+                onClick={() => setTestType('webapp')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: 8,
+                  background: testType === 'webapp' ? '#FFFFFF' : 'transparent',
+                  cursor: 'pointer',
+                  fontWeight: testType === 'webapp' ? 600 : 500,
+                  fontSize: 14,
+                  color: testType === 'webapp' ? '#0F172A' : '#64748B',
+                  transition: 'all 0.2s ease',
+                  boxShadow: testType === 'webapp' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                Web App
+              </button>
+            </div>
+          </div>
           {bootLoading ? (
             <div className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160 }}>
               <div className="spinner" />
