@@ -522,7 +522,7 @@ export default function CreateRunUnifiedPage() {
     return () => { stop = true; };
   }, [step, activeRunId]);
 
-  async function launchRun(personaConfigs: { personaId: number; traits: string; users: number }[], exclusiveUsers: boolean) {
+  async function launchRun(personaConfigs: { personaId: number; name?: string; traits: string; users: number }[], exclusiveUsers: boolean) {
     console.log('[launchRun] Called with personaConfigs:', personaConfigs, 'exclusiveUsers:', exclusiveUsers);
     console.log('[launchRun] testType:', testType);
 
