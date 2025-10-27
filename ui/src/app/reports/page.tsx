@@ -1879,13 +1879,13 @@ export default function ReportsPage() {
                     <div style={{
                       border: '1px solid var(--border)',
                       borderRadius: 12,
-                      padding: '24px 20px',
+                      padding: '20px 18px',
                       background: 'var(--elev)',
                       marginTop: 16
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
                         <div>
-                          <div className="muted" style={{ fontSize: 13, marginBottom: 8, fontWeight: 500 }}>API Response Time</div>
+                          <div className="muted" style={{ fontSize: 13, marginBottom: 12, fontWeight: 500 }}>API Response Time</div>
                           <div style={{ fontSize: 40, fontWeight: 700, lineHeight: 1 }}>
                             {(metrics as any).performance.apiResponseTime.avgMs}ms
                           </div>
@@ -1897,44 +1897,37 @@ export default function ReportsPage() {
 
                       {(metrics as any).performance.apiResponseTime.slowestEndpoints && (metrics as any).performance.apiResponseTime.slowestEndpoints.length > 0 && (
                         <div>
-                          <div className="muted" style={{ fontSize: 12, marginBottom: 12, fontWeight: 500 }}>Top {(metrics as any).performance.apiResponseTime.slowestEndpoints.length} Slowest Endpoints</div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                          <div className="muted" style={{ fontSize: 12, marginBottom: 16, fontWeight: 500 }}>Top {(metrics as any).performance.apiResponseTime.slowestEndpoints.length} Slowest Endpoints</div>
+                          <div style={{
+                            border: '1px solid var(--border)',
+                            borderRadius: 8,
+                            overflow: 'hidden'
+                          }}>
                             {(metrics as any).performance.apiResponseTime.slowestEndpoints.map((endpoint: any, idx: number) => {
-                              const maxDuration = (metrics as any).performance.apiResponseTime.maxMs;
                               const avgDuration = (metrics as any).performance.apiResponseTime.avgMs;
-                              const widthPercent = maxDuration > 0 ? (endpoint.duration_ms / maxDuration) * 100 : 0;
 
                               // Calculate percentage above/below average
                               const percentDiff = avgDuration > 0 ? Math.round(((endpoint.duration_ms - avgDuration) / avgDuration) * 100) : 0;
 
-                              // Determine color based on performance with gradient
-                              let barColor = '#10b981';
-                              let barGradient = 'linear-gradient(90deg, #059669 0%, #10b981 100%)';
+                              // Determine severity indicator
+                              let severityColor = '#10b981';
+                              let severityLabel = 'Good';
 
                               if (endpoint.duration_ms > avgDuration * 2) {
-                                // Very slow - Deep red gradient
-                                barColor = '#dc2626';
-                                barGradient = 'linear-gradient(90deg, #991b1b 0%, #dc2626 100%)';
+                                severityColor = '#dc2626';
+                                severityLabel = 'Critical';
                               } else if (endpoint.duration_ms > avgDuration * 1.5) {
-                                // Slow - Orange/Red gradient
-                                barColor = '#f97316';
-                                barGradient = 'linear-gradient(90deg, #ea580c 0%, #f97316 100%)';
+                                severityColor = '#f97316';
+                                severityLabel = 'Slow';
                               } else if (endpoint.duration_ms > avgDuration * 1.2) {
-                                // Moderate - Amber gradient
-                                barColor = '#f59e0b';
-                                barGradient = 'linear-gradient(90deg, #d97706 0%, #f59e0b 100%)';
+                                severityColor = '#f59e0b';
+                                severityLabel = 'Moderate';
                               } else if (endpoint.duration_ms > avgDuration) {
-                                // Slightly slow - Yellow/Amber gradient
-                                barColor = '#eab308';
-                                barGradient = 'linear-gradient(90deg, #ca8a04 0%, #eab308 100%)';
+                                severityColor = '#eab308';
+                                severityLabel = 'Fair';
                               } else if (endpoint.duration_ms < avgDuration * 0.7) {
-                                // Excellent - Teal/Cyan gradient
-                                barColor = '#06b6d4';
-                                barGradient = 'linear-gradient(90deg, #0891b2 0%, #06b6d4 100%)';
-                              } else {
-                                // Good - Green gradient
-                                barColor = '#10b981';
-                                barGradient = 'linear-gradient(90deg, #059669 0%, #10b981 100%)';
+                                severityColor = '#06b6d4';
+                                severityLabel = 'Excellent';
                               }
 
                               // Status code color
@@ -1949,56 +1942,43 @@ export default function ReportsPage() {
 
                               return (
                                 <div key={idx} style={{
-                                  padding: '12px 0',
+                                  padding: '12px 14px',
                                   background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)',
-                                  borderBottom: isNotLastRow ? '1px solid var(--border)' : 'none'
+                                  borderBottom: isNotLastRow ? '1px solid var(--border)' : 'none',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 12
                                 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 11, fontFamily: 'monospace', paddingLeft: 12, paddingRight: 12 }}>
-                                    <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      <span style={{ fontWeight: 700, color: barColor }}>{endpoint.method}</span>{' '}
-                                      <span>{endpoint.url}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
-                                      <span style={{
-                                        fontSize: 10,
-                                        padding: '2px 6px',
-                                        borderRadius: 4,
-                                        background: `${statusColor}20`,
-                                        color: statusColor,
-                                        fontWeight: 600
-                                      }}>{endpoint.status}</span>
-                                      <span style={{ fontWeight: 700 }}>
-                                        {endpoint.duration_ms}ms
-                                      </span>
-                                      {percentDiff !== 0 && (
-                                        <span style={{
-                                          fontSize: 10,
-                                          color: percentDiff > 0 ? barColor : '#10b981',
-                                          fontWeight: 600
-                                        }}>
-                                          {percentDiff > 0 ? '+' : ''}{percentDiff}%
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
                                   <div style={{
-                                    width: 'calc(100% - 24px)',
-                                    height: 10,
-                                    background: 'rgba(148, 163, 184, 0.1)',
-                                    borderRadius: 5,
-                                    overflow: 'hidden',
-                                    marginLeft: 12,
-                                    marginRight: 12,
-                                    border: '1px solid rgba(148, 163, 184, 0.15)'
-                                  }}>
-                                    <div style={{
-                                      width: `${widthPercent}%`,
-                                      height: '100%',
-                                      background: barGradient,
-                                      borderRadius: 5,
-                                      transition: 'width 0.3s ease, box-shadow 0.3s ease',
-                                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08)'
-                                    }}></div>
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: '50%',
+                                    background: severityColor,
+                                    flexShrink: 0
+                                  }}></div>
+                                  <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace' }}>
+                                    <span style={{ fontWeight: 700 }}>{endpoint.method}</span>{' '}
+                                    <span className="muted">{endpoint.url}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                                    <span style={{
+                                      fontSize: 10,
+                                      padding: '2px 6px',
+                                      borderRadius: 4,
+                                      color: statusColor,
+                                      fontWeight: 600
+                                    }}>{endpoint.status}</span>
+                                    <span style={{ fontWeight: 700, fontSize: 13 }}>
+                                      {endpoint.duration_ms}ms
+                                    </span>
+                                    {percentDiff > 0 && (
+                                      <span className="muted" style={{
+                                        fontSize: 10,
+                                        fontWeight: 500
+                                      }}>
+                                        +{percentDiff}%
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -2011,24 +1991,23 @@ export default function ReportsPage() {
                             justifyContent: 'space-around',
                             marginTop: 16,
                             paddingTop: 16,
-                            borderTop: '1px solid var(--border)',
-                            fontSize: 11
+                            borderTop: '1px solid var(--border)'
                           }}>
                             <div style={{ textAlign: 'center' }}>
-                              <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Min</div>
-                              <div style={{ fontWeight: 700, color: '#10b981' }}>
+                              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Min</div>
+                              <div style={{ fontWeight: 700, color: '#10b981', fontSize: 16 }}>
                                 {(metrics as any).performance.apiResponseTime.minMs}ms
                               </div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                              <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Avg</div>
-                              <div style={{ fontWeight: 700 }}>
+                              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Avg</div>
+                              <div style={{ fontWeight: 700, fontSize: 16 }}>
                                 {(metrics as any).performance.apiResponseTime.avgMs}ms
                               </div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                              <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Max</div>
-                              <div style={{ fontWeight: 700, color: '#ef4444' }}>
+                              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Max</div>
+                              <div style={{ fontWeight: 700, color: '#ef4444', fontSize: 16 }}>
                                 {(metrics as any).performance.apiResponseTime.maxMs}ms
                               </div>
                             </div>
