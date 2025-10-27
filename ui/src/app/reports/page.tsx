@@ -1408,15 +1408,10 @@ export default function ReportsPage() {
     const u = String(p || '');
     if (!u) return u;
     if (/^https?:\/\//i.test(u)) return u;
-    // Construct full backend URL for image files
+    // Return relative path - Next.js rewrites will proxy to backend
+    // Works in both dev (localhost:3000 -> localhost:8000) and production (domain.com -> backend)
     const path = u.startsWith('/') ? u : `/${u}`;
-    try {
-      // Use backend API URL directly (assuming localhost:3000 for development)
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      return `${backendUrl}${path}`;
-    } catch {
-      return `/api/proxy_image?path=${encodeURIComponent(path)}`;
-    }
+    return path;
   }
 
   useEffect(() => { loadProjects(); }, []);
