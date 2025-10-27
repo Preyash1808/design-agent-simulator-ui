@@ -1408,10 +1408,10 @@ export default function ReportsPage() {
     const u = String(p || '');
     if (!u) return u;
     if (/^https?:\/\//i.test(u)) return u;
-    // Return relative path - Next.js rewrites will proxy to backend
-    // Works in both dev (localhost:3000 -> localhost:8000) and production (domain.com -> backend)
+    // Use proxy_image API route (same approach as TEA Thoughts)
+    // Works in both dev and production - proxy_image fetches from SPARROW_API backend
     const path = u.startsWith('/') ? u : `/${u}`;
-    return path;
+    return `/api/proxy_image?path=${encodeURIComponent(path)}`;
   }
 
   useEffect(() => { loadProjects(); }, []);
