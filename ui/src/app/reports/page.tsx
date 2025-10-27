@@ -700,44 +700,29 @@ export default function ReportsPage() {
       if (!runId) { setLoading(false); return; }
 
       // Detect test type by checking if this is a webapp test
-      // Web app tests have run_dir starting with 'webapp_test_'
-      try {
-        const statusR = await fetch(`/api/status?run_id=${encodeURIComponent(runId)}`, {
-          headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          cache: 'no-store'
-        });
-        if (statusR.ok) {
-          const statusData = await statusR.json();
-          const runItem = (statusData.items || []).find((x: any) => String(x.id) === String(runId));
-          const runDir = String(runItem?.run_dir || '');
-          const isWebApp = runDir.startsWith('webapp_test_');
-          setTestType(isWebApp ? 'webapp' : 'figma');
+      // Web app tests have run_id starting with 'test_run_'
+      const isWebAppTest = runId.startsWith('test_run_');
+      setTestType(isWebAppTest ? 'webapp' : 'figma');
 
-          // If webapp test, load journey data instead of metrics
-          if (isWebApp) {
-            setJourneyLoading(true);
-            try {
-              const journeyR = await fetch(`/api/journey?runId=${encodeURIComponent(runDir)}`, {
-                headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                cache: 'no-store'
-              });
-              if (journeyR.ok) {
-                const journeyDataResult = await journeyR.json();
-                setJourneyData(journeyDataResult);
-                setTab('journey'); // Auto-switch to journey tab
-              }
-            } catch (e) {
-              console.error('Failed to load journey data:', e);
-            } finally {
-              setJourneyLoading(false);
-              setLoading(false);
-              setBootLoading(false);
-            }
-            return; // Skip loading regular metrics for webapp tests
+      // If webapp test, load journey data (but also load metrics for performance data)
+      if (isWebAppTest) {
+        setJourneyLoading(true);
+        try {
+          const journeyR = await fetch(`/api/journey?runId=${encodeURIComponent(runId)}`, {
+            headers: { 'Accept': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            cache: 'no-store'
+          });
+          if (journeyR.ok) {
+            const journeyDataResult = await journeyR.json();
+            setJourneyData(journeyDataResult);
+            setTab('journey'); // Auto-switch to journey tab
           }
+        } catch (e) {
+          console.error('Failed to load journey data:', e);
+        } finally {
+          setJourneyLoading(false);
         }
-      } catch (e) {
-        console.error('Failed to detect test type:', e);
+        // Continue to load metrics_public for performance data (don't return early)
       }
 
       // Try public endpoint first (has enriched fallbacks), then internal
@@ -1772,6 +1757,289 @@ export default function ReportsPage() {
                 </div>
               )}
             </div>
+            {/* Performance Metrics - Only for Web App Tests */}
+            {(metrics as any)?.is_webapp_test && (metrics as any)?.performance && (
+              <div className="tile">
+                <h4>Performance Metrics</h4>
+
+                {/* First 3 metrics in a grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 16 }}>
+
+                  {/* Page Load Time */}
+                  {(metrics as any).performance.pageLoad && (
+                    <div style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: '20px 18px',
+                      background: 'var(--elev)'
+                    }}>
+                      <div className="muted" style={{ fontSize: 13, marginBottom: 12, fontWeight: 500 }}>Page Load Time</div>
+                      <div style={{ fontSize: 40, fontWeight: 700, marginBottom: 12, lineHeight: 1 }}>
+                        {((metrics as any).performance.pageLoad.avgMs / 1000).toFixed(2)}s
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          Min: {((metrics as any).performance.pageLoad.minMs / 1000).toFixed(2)}s
+                        </div>
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          Max: {((metrics as any).performance.pageLoad.maxMs / 1000).toFixed(2)}s
+                        </div>
+                      </div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {(metrics as any).performance.pageLoad.samples} page{(metrics as any).performance.pageLoad.samples !== 1 ? 's' : ''} measured
+                      </div>
+                    </div>
+                  )}
+
+                  {/* API Requests */}
+                  {(metrics as any).performance.apiRequests && (
+                    <div style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: '20px 18px',
+                      background: 'var(--elev)'
+                    }}>
+                      <div className="muted" style={{ fontSize: 13, marginBottom: 12, fontWeight: 500 }}>API Requests</div>
+                      <div style={{ fontSize: 40, fontWeight: 700, marginBottom: 12, lineHeight: 1 }}>
+                        {(metrics as any).performance.apiRequests.totalRequests}
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        {(metrics as any).performance.apiRequests.failedRequests > 0 ? (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {(metrics as any).performance.apiRequests.failedRequests} failed
+                          </span>
+                        ) : (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            All successful
+                          </span>
+                        )}
+                      </div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        Total network requests tracked
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Console Errors */}
+                  {(metrics as any).performance.consoleErrors && (
+                    <div style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: '20px 18px',
+                      background: 'var(--elev)'
+                    }}>
+                      <div className="muted" style={{ fontSize: 13, marginBottom: 12, fontWeight: 500 }}>Console Errors</div>
+                      <div style={{ fontSize: 40, fontWeight: 700, marginBottom: 12, lineHeight: 1 }}>
+                        {(metrics as any).performance.consoleErrors.totalErrors}
+                      </div>
+                      {(metrics as any).performance.consoleErrors.totalErrors > 0 && (metrics as any).performance.consoleErrors.recentErrors && (metrics as any).performance.consoleErrors.recentErrors.length > 0 && (
+                        <details style={{ marginBottom: 8 }}>
+                          <summary className="muted" style={{
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            marginBottom: 6,
+                            userSelect: 'none'
+                          }}>▸ Recent errors ({(metrics as any).performance.consoleErrors.recentErrors.length})</summary>
+                          <div style={{
+                            fontSize: 11,
+                            maxHeight: 100,
+                            overflowY: 'auto',
+                            marginTop: 8,
+                            padding: 10,
+                            background: 'var(--bg)',
+                            borderRadius: 6,
+                            border: '1px solid var(--border)'
+                          }}>
+                            {((metrics as any).performance.consoleErrors.recentErrors as any[]).slice(0, 5).map((err: any, i: number) => {
+                              const isNotLastError = i !== Math.min(4, (metrics as any).performance.consoleErrors.recentErrors.length - 1);
+                              return (
+                                <div key={i} className="muted" style={{
+                                  fontSize: 10,
+                                  marginBottom: 6,
+                                  paddingBottom: 6,
+                                  borderBottom: isNotLastError ? '1px solid var(--border)' : 'none',
+                                  lineHeight: 1.4
+                                }}>
+                                  • {err.message || 'Unknown error'}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      )}
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {(metrics as any).performance.consoleErrors.totalErrors === 0 ? 'No errors detected' : 'Errors logged during test'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* API Response Time - Full Width Below */}
+                {(metrics as any).performance.apiResponseTime && (metrics as any).performance.apiResponseTime.samples > 0 && (
+                    <div style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: '24px 20px',
+                      background: 'var(--elev)',
+                      marginTop: 16
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+                        <div>
+                          <div className="muted" style={{ fontSize: 13, marginBottom: 8, fontWeight: 500 }}>API Response Time</div>
+                          <div style={{ fontSize: 40, fontWeight: 700, lineHeight: 1 }}>
+                            {(metrics as any).performance.apiResponseTime.avgMs}ms
+                          </div>
+                        </div>
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          {(metrics as any).performance.apiResponseTime.samples} API call{(metrics as any).performance.apiResponseTime.samples !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+
+                      {(metrics as any).performance.apiResponseTime.slowestEndpoints && (metrics as any).performance.apiResponseTime.slowestEndpoints.length > 0 && (
+                        <div>
+                          <div className="muted" style={{ fontSize: 12, marginBottom: 12, fontWeight: 500 }}>Top {(metrics as any).performance.apiResponseTime.slowestEndpoints.length} Slowest Endpoints</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                            {(metrics as any).performance.apiResponseTime.slowestEndpoints.map((endpoint: any, idx: number) => {
+                              const maxDuration = (metrics as any).performance.apiResponseTime.maxMs;
+                              const avgDuration = (metrics as any).performance.apiResponseTime.avgMs;
+                              const widthPercent = maxDuration > 0 ? (endpoint.duration_ms / maxDuration) * 100 : 0;
+
+                              // Calculate percentage above/below average
+                              const percentDiff = avgDuration > 0 ? Math.round(((endpoint.duration_ms - avgDuration) / avgDuration) * 100) : 0;
+
+                              // Determine color based on performance with gradient
+                              let barColor = '#10b981';
+                              let barGradient = 'linear-gradient(90deg, #059669 0%, #10b981 100%)';
+
+                              if (endpoint.duration_ms > avgDuration * 2) {
+                                // Very slow - Deep red gradient
+                                barColor = '#dc2626';
+                                barGradient = 'linear-gradient(90deg, #991b1b 0%, #dc2626 100%)';
+                              } else if (endpoint.duration_ms > avgDuration * 1.5) {
+                                // Slow - Orange/Red gradient
+                                barColor = '#f97316';
+                                barGradient = 'linear-gradient(90deg, #ea580c 0%, #f97316 100%)';
+                              } else if (endpoint.duration_ms > avgDuration * 1.2) {
+                                // Moderate - Amber gradient
+                                barColor = '#f59e0b';
+                                barGradient = 'linear-gradient(90deg, #d97706 0%, #f59e0b 100%)';
+                              } else if (endpoint.duration_ms > avgDuration) {
+                                // Slightly slow - Yellow/Amber gradient
+                                barColor = '#eab308';
+                                barGradient = 'linear-gradient(90deg, #ca8a04 0%, #eab308 100%)';
+                              } else if (endpoint.duration_ms < avgDuration * 0.7) {
+                                // Excellent - Teal/Cyan gradient
+                                barColor = '#06b6d4';
+                                barGradient = 'linear-gradient(90deg, #0891b2 0%, #06b6d4 100%)';
+                              } else {
+                                // Good - Green gradient
+                                barColor = '#10b981';
+                                barGradient = 'linear-gradient(90deg, #059669 0%, #10b981 100%)';
+                              }
+
+                              // Status code color
+                              let statusColor = '#10b981'; // Green for 2xx
+                              if (endpoint.status >= 400 && endpoint.status < 500) {
+                                statusColor = '#f59e0b'; // Orange for 4xx
+                              } else if (endpoint.status >= 500) {
+                                statusColor = '#ef4444'; // Red for 5xx
+                              }
+
+                              const isNotLastRow = idx !== (metrics as any).performance.apiResponseTime.slowestEndpoints.length - 1;
+
+                              return (
+                                <div key={idx} style={{
+                                  padding: '12px 0',
+                                  background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)',
+                                  borderBottom: isNotLastRow ? '1px solid var(--border)' : 'none'
+                                }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 11, fontFamily: 'monospace', paddingLeft: 12, paddingRight: 12 }}>
+                                    <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      <span style={{ fontWeight: 700, color: barColor }}>{endpoint.method}</span>{' '}
+                                      <span>{endpoint.url}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+                                      <span style={{
+                                        fontSize: 10,
+                                        padding: '2px 6px',
+                                        borderRadius: 4,
+                                        background: `${statusColor}20`,
+                                        color: statusColor,
+                                        fontWeight: 600
+                                      }}>{endpoint.status}</span>
+                                      <span style={{ fontWeight: 700 }}>
+                                        {endpoint.duration_ms}ms
+                                      </span>
+                                      {percentDiff !== 0 && (
+                                        <span style={{
+                                          fontSize: 10,
+                                          color: percentDiff > 0 ? barColor : '#10b981',
+                                          fontWeight: 600
+                                        }}>
+                                          {percentDiff > 0 ? '+' : ''}{percentDiff}%
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div style={{
+                                    width: 'calc(100% - 24px)',
+                                    height: 10,
+                                    background: 'rgba(148, 163, 184, 0.1)',
+                                    borderRadius: 5,
+                                    overflow: 'hidden',
+                                    marginLeft: 12,
+                                    marginRight: 12,
+                                    border: '1px solid rgba(148, 163, 184, 0.15)'
+                                  }}>
+                                    <div style={{
+                                      width: `${widthPercent}%`,
+                                      height: '100%',
+                                      background: barGradient,
+                                      borderRadius: 5,
+                                      transition: 'width 0.3s ease, box-shadow 0.3s ease',
+                                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08)'
+                                    }}></div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Stats footer */}
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-around',
+                            marginTop: 16,
+                            paddingTop: 16,
+                            borderTop: '1px solid var(--border)',
+                            fontSize: 11
+                          }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Min</div>
+                              <div style={{ fontWeight: 700, color: '#10b981' }}>
+                                {(metrics as any).performance.apiResponseTime.minMs}ms
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                              <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Avg</div>
+                              <div style={{ fontWeight: 700 }}>
+                                {(metrics as any).performance.apiResponseTime.avgMs}ms
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                              <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Max</div>
+                              <div style={{ fontWeight: 700, color: '#ef4444' }}>
+                                {(metrics as any).performance.apiResponseTime.maxMs}ms
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+              </div>
+            )}
+
           <div className="tile">
               <h4>Problem Areas</h4>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
