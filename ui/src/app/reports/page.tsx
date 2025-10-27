@@ -1408,12 +1408,12 @@ export default function ReportsPage() {
     const u = String(p || '');
     if (!u) return u;
     if (/^https?:\/\//i.test(u)) return u;
-    // go through proxy to avoid mixed-origin or auth issues
+    // Construct full backend URL for image files
     const path = u.startsWith('/') ? u : `/${u}`;
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-      const qs = token ? `&token=${encodeURIComponent(token)}` : '';
-      return `/api/proxy_image?path=${encodeURIComponent(path)}${qs}`;
+      // Use backend API URL directly (assuming localhost:3000 for development)
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      return `${backendUrl}${path}`;
     } catch {
       return `/api/proxy_image?path=${encodeURIComponent(path)}`;
     }
@@ -2373,7 +2373,7 @@ export default function ReportsPage() {
                             transition: 'transform 0.2s ease'
                           }}
                         >
-                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s ease' }}>
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ transform: isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
                             <path d="M5 12.5L10 7.5L15 12.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         </button>
@@ -2454,7 +2454,7 @@ export default function ReportsPage() {
                       )}
                     </div>
                     <div style={{ lineHeight: 1.5 }}>
-                      <div style={{ color: '#e5e7eb' }}>{beautifyRecommendation(r.text)}</div>
+                      <div style={{ color: '#0F172A' }}>{beautifyRecommendation(r.text)}</div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', height: 48, justifyContent: 'flex-end' }}>
                       {r.count ? (
@@ -2640,7 +2640,10 @@ export default function ReportsPage() {
                                   <h4>Unique TEA Thoughts</h4>
                                   {Array.isArray((personaDetail as any).tea_thoughts) && (personaDetail as any).tea_thoughts.length > 0 ? (
                                     <div style={{ marginTop: 8 }}>
-                                      <TeaThoughtTimeline teaThoughts={Array.isArray((personaDetail as any).tea_thoughts) ? (personaDetail as any).tea_thoughts : []} />
+                                      <TeaThoughtTimeline
+                                        teaThoughts={Array.isArray((personaDetail as any).tea_thoughts) ? (personaDetail as any).tea_thoughts : []}
+                                        onImageClick={(imageUrl) => setPreviewImg(imageUrl)}
+                                      />
                                     </div>
                                   ) : (
                                     <div className="muted" style={{ marginTop: 8 }}>No thoughts</div>

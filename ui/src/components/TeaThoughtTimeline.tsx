@@ -30,7 +30,7 @@ function toProxyUrl(u?: string | null): string | undefined {
   }
 }
 
-export default function TeaThoughtTimeline({ teaThoughts }: { teaThoughts: TeaThought[] }) {
+export default function TeaThoughtTimeline({ teaThoughts, onImageClick }: { teaThoughts: TeaThought[]; onImageClick?: (imageUrl: string) => void }) {
   // Sort in UI: negative (lower valence / higher friction / not success) first
   const items = useMemo(() => {
     const arr = Array.isArray(teaThoughts) ? [...teaThoughts] : [];
@@ -120,7 +120,14 @@ export default function TeaThoughtTimeline({ teaThoughts }: { teaThoughts: TeaTh
                 {/* Thumbnail */}
                 {thumbSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={thumbSrc} alt={t.screen_name || ''} width={64} height={64} style={{ borderRadius: 12, objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }} />
+                  <img
+                    src={thumbSrc}
+                    alt={t.screen_name || ''}
+                    width={64}
+                    height={64}
+                    style={{ borderRadius: 12, objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0, cursor: 'zoom-in' }}
+                    onClick={() => { if (onImageClick) onImageClick(thumbSrc); }}
+                  />
                 ) : (
                   <div style={{ width: 64, height: 64, borderRadius: 12, background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 11, border: '1px solid #E2E8F0', flexShrink: 0 }}>No image</div>
                 )}

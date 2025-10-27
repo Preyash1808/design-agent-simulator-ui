@@ -72,6 +72,7 @@ export default function CreateRunUnifiedPage() {
   const [completedProjectIds, setCompletedProjectIds] = useState<string[]>([]);
   const [defaultCompletedProjectId, setDefaultCompletedProjectId] = useState('');
   const [hasAnyProjects, setHasAnyProjects] = useState<boolean>(true);
+  const [isAcceptanceCriteriaExpanded, setIsAcceptanceCriteriaExpanded] = useState(false);
 
   const unifiedEnabled = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_UNIFIED_FLOW === '1' || process.env.NEXT_PUBLIC_UNIFIED_FLOW === 'true') : true;
   const STATE_KEY = 'sparrow_launch_state_v1';
@@ -990,30 +991,52 @@ export default function CreateRunUnifiedPage() {
             {/* Acceptance Criteria */}
             <div style={{
               marginTop: 24,
-              padding: 20,
               background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)',
               border: '2px solid #E2E8F0',
               borderRadius: 12,
               boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: '#0F172A' }}>
-                  Acceptance Criteria
+              <div
+                onClick={() => setIsAcceptanceCriteriaExpanded(!isAcceptanceCriteriaExpanded)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 20,
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: '#0F172A' }}>
+                    Acceptance Criteria
+                  </div>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#10B981',
+                    background: '#D1FAE5',
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid #A7F3D0',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    Optional
+                  </span>
                 </div>
-                <span style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: '#10B981',
-                  background: '#D1FAE5',
-                  padding: '4px 10px',
-                  borderRadius: 999,
-                  border: '1px solid #A7F3D0',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
+                <div style={{
+                  fontSize: 18,
+                  color: '#64748B',
+                  transition: 'transform 0.2s ease',
+                  transform: isAcceptanceCriteriaExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
                 }}>
-                  Optional
-                </span>
+                  ▼
+                </div>
               </div>
+
+              {isAcceptanceCriteriaExpanded && (
+                <div style={{ padding: '0 20px 20px 20px' }}>
 
               {/* Smart Completion Info Banner */}
               <div style={{
@@ -1120,6 +1143,8 @@ export default function CreateRunUnifiedPage() {
                   }}
                 />
               </div>
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}
