@@ -19,10 +19,20 @@ const NAV: NavItem[] = [
     icon: <IconBeaker width={18} height={18} />,
     subItems: [
       { href: '/configure-persona', label: 'Configure Persona' },
-      { href: '/configure-test', label: 'Configure Test' }
+      { href: '/configure-test', label: 'Configure Test' },
+      { href: '/reports', label: 'Reports' }
     ]
   },
-  { href: '/reports', label: 'Reports', icon: <IconFolder width={18} height={18} /> },
+  {
+    href: '/functional-test',
+    label: 'Launch Functional Test',
+    icon: <IconFourSquare width={18} height={18} />,
+    subItems: [
+      { href: '/configure-functional-test', label: 'Configure Test' },
+      { href: '/flow-insights', label: 'Flow Insights' },
+      { href: '/result-overview', label: 'Result Overview' }
+    ]
+  },
 ];
 
 export default function Sidebar() {
