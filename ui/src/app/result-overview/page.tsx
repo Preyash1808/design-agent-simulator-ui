@@ -49,6 +49,8 @@ export default function ResultOverviewPage() {
   const [bootLoading, setBootLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [testResults] = useState<TestResult[]>(DUMMY_RESULTS);
+  const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
 
   async function loadProjects() {
     try {
@@ -288,7 +290,21 @@ export default function ResultOverviewPage() {
                   filteredResults.map((result, index) => (
                     <tr key={result.id} style={{ background: index % 2 === 0 ? '#FFFFFF' : 'rgba(249, 250, 251, 0.5)' }}>
                       <td style={{ padding: '12px 16px', verticalAlign: 'top', fontSize: 14, color: '#1F2937' }}>
-                        {result.category}
+                        <a
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setSelectedResult(result);
+                            setShowSidebar(true);
+                          }}
+                          style={{
+                            color: '#3b82f6',
+                            textDecoration: 'underline',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {result.category}
+                        </a>
                       </td>
                       <td style={{ padding: '12px 16px', verticalAlign: 'top', fontSize: 14, color: '#374151' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
@@ -312,6 +328,147 @@ export default function ResultOverviewPage() {
           </div>
         </section>
       </div>
+
+      {/* Category Details Sidebar Modal */}
+      {showSidebar && selectedResult && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setShowSidebar(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.3)',
+              zIndex: 999
+            }}
+          />
+
+          {/* Sidebar */}
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            width: 480,
+            height: '100vh',
+            background: '#fff',
+            boxShadow: '-4px 0 12px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            overflow: 'auto',
+            padding: 24
+          }}>
+            {/* Close Button */}
+            <button
+              onClick={() => setShowSidebar(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                border: 'none',
+                background: 'transparent',
+                fontSize: 24,
+                cursor: 'pointer',
+                color: '#64748b',
+                padding: 4
+              }}
+            >
+              ×
+            </button>
+
+            {/* Title */}
+            <h2 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 700, color: '#0f172a' }}>
+              Issue Details
+            </h2>
+
+            {/* Name (Category) */}
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Name</h3>
+              <div style={{
+                padding: 12,
+                background: '#f8fafc',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                fontSize: 14,
+                color: '#0f172a',
+                fontWeight: 600
+              }}>
+                {selectedResult.category}
+              </div>
+            </div>
+
+            {/* Path */}
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Path</h3>
+              <div style={{
+                padding: 12,
+                background: '#f8fafc',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                fontSize: 13,
+                fontFamily: 'monospace',
+                color: '#475569'
+              }}>
+                {selectedResult.path.join(' → ')}
+              </div>
+            </div>
+
+            {/* Evidence */}
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Evidence (What Actually Happened)</h3>
+              <div style={{
+                padding: 12,
+                background: '#fef2f2',
+                borderRadius: 8,
+                border: '1px solid #fecaca',
+                fontSize: 13,
+                color: '#0f172a',
+                lineHeight: 1.6
+              }}>
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>Issue detected in "{selectedResult.category}" category</li>
+                  <li>User followed path: {selectedResult.path.join(' → ')}</li>
+                  <li>Critical issue affecting user experience at this step</li>
+                  <li>Issue requires immediate attention and review</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Repro Steps */}
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Repro Steps</h3>
+              <div style={{
+                padding: 12,
+                background: '#f8fafc',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0'
+              }}>
+                <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#475569', lineHeight: 1.8 }}>
+                  {selectedResult.path.map((step, index) => (
+                    <li key={index}>Navigate to "{step}"</li>
+                  ))}
+                  <li>Observe the issue in the "{selectedResult.category}" category</li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Issue Badge */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#dc2626'
+            }}>
+              <span style={{ fontSize: 16 }}>⚠</span>
+              {selectedResult.category}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

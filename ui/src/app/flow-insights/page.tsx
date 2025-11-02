@@ -51,6 +51,8 @@ export default function FlowInsightsPage() {
   const [bootLoading, setBootLoading] = useState(true);
   const [zoom, setZoom] = useState(1);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [showModal, setShowModal] = useState(false);
 
   async function loadProjects() {
     try {
@@ -249,10 +251,11 @@ export default function FlowInsightsPage() {
     function nodeHTML(n: any) {
       const style = severityStyle(n.issues);
       const users = `${n.users} users`;
-      const cardClass = style.cardClass === "card red" ? "flow-card red" : "flow-card";
+      const cardClass = style.cardClass === "card red" ? "flow-card red clickable" : "flow-card";
       const chipClass = style.chipClass === "chip red" ? "flow-chip red" : "flow-chip";
+      const hasIssues = Array.isArray(n.issues) && n.issues.length > 0;
       return `
-        <div xmlns="http://www.w3.org/1999/xhtml" class="${cardClass}">
+        <div xmlns="http://www.w3.org/1999/xhtml" class="${cardClass}" data-node-id="${n.id}" style="${hasIssues ? 'cursor: pointer;' : ''}">
           <div class="flow-title" title="${n.label}">${n.label}</div>
           <div class="flow-meta">${users}</div>
           <span class="${chipClass}">${issuesLabel(n.issues)}</span>
@@ -270,6 +273,16 @@ export default function FlowInsightsPage() {
         fo.setAttribute('width', String(nodeSize.w));
         fo.setAttribute('height', String(nodeSize.h));
         fo.innerHTML = nodeHTML(n);
+
+        // Add click handler for nodes with issues
+        if (Array.isArray(n.issues) && n.issues.length > 0) {
+          fo.addEventListener('click', () => {
+            console.log('Node clicked:', n.id);
+            setSelectedNode(n);
+            setShowModal(true);
+          });
+        }
+
         svg.appendChild(fo);
       });
     });
@@ -390,6 +403,146 @@ export default function FlowInsightsPage() {
         <svg ref={svgRef} style={{ display: 'block', transformOrigin: 'left top', transform: `scale(${zoom})`, background: '#f9fafb' }} />
       </div>
 
+      {/* Sidebar Modal */}
+      {showModal && selectedNode && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          width: 480,
+          height: '100vh',
+          background: '#fff',
+          boxShadow: '-4px 0 12px rgba(0,0,0,0.15)',
+          zIndex: 1000,
+          overflow: 'auto',
+          padding: 24
+        }}>
+          {/* Close Button */}
+          <button
+            onClick={() => setShowModal(false)}
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              border: 'none',
+              background: 'transparent',
+              fontSize: 24,
+              cursor: 'pointer',
+              color: '#64748b',
+              padding: 4
+            }}
+          >
+            ×
+          </button>
+
+          {/* Title */}
+          <h2 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 700, color: '#0f172a' }}>
+            Issue Details
+          </h2>
+
+          {/* Name */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Name</h3>
+            <div style={{
+              padding: 12,
+              background: '#f8fafc',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              fontSize: 14,
+              color: '#0f172a'
+            }}>
+              {selectedNode.label}
+            </div>
+          </div>
+
+          {/* Path */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Path</h3>
+            <div style={{
+              padding: 12,
+              background: '#f8fafc',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              fontSize: 13,
+              fontFamily: 'monospace',
+              color: '#475569'
+            }}>
+              Home → Product → Cart → {selectedNode.label}
+            </div>
+          </div>
+
+          {/* Evidence */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Evidence (What Actually Happened)</h3>
+            <div style={{
+              padding: 12,
+              background: '#fef2f2',
+              borderRadius: 8,
+              border: '1px solid #fecaca',
+              fontSize: 13,
+              color: '#0f172a',
+              lineHeight: 1.6
+            }}>
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
+                <li>User reached "{selectedNode.label}" screen with {selectedNode.users} users</li>
+                <li>Detected {selectedNode.issues?.length || 0} critical issues affecting user flow</li>
+                <li>High abandonment rate observed at this step</li>
+                <li>Payment gateway timeout errors reported</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Repro Steps */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Repro Steps</h3>
+            <div style={{
+              padding: 12,
+              background: '#f8fafc',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0'
+            }}>
+              <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#475569', lineHeight: 1.8 }}>
+                <li>Navigate to Home page</li>
+                <li>Click on "Product" category</li>
+                <li>Add item to Cart</li>
+                <li>Proceed to "{selectedNode.label}"</li>
+                <li>Observe the issue at this step</li>
+              </ol>
+            </div>
+          </div>
+
+          {/* Issue Count Badge */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 16px',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#dc2626'
+          }}>
+            <span style={{ fontSize: 16 }}>⚠</span>
+            {selectedNode.issues?.length || 0} {selectedNode.issues?.length === 1 ? 'issue' : 'issues'} found
+          </div>
+        </div>
+      )}
+
+      {/* Backdrop */}
+      {showModal && (
+        <div
+          onClick={() => setShowModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.3)',
+            zIndex: 999
+          }}
+        />
+      )}
+
       <style dangerouslySetInnerHTML={{__html: `
         .flow-card {
           position: relative;
@@ -402,10 +555,28 @@ export default function FlowInsightsPage() {
           box-shadow: 0 1px 2px rgba(0,0,0,.06);
           padding: 8px 12px;
           overflow: hidden;
+          transition: all 0.3s ease;
         }
         .flow-card.red {
           border-color: #f87171;
           background: #fff5f5;
+          animation: pulse-border 2s ease-in-out infinite;
+        }
+        .flow-card.clickable:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 8px 16px rgba(239, 68, 68, 0.25);
+          border-color: #dc2626;
+          background: #fff;
+        }
+        @keyframes pulse-border {
+          0%, 100% {
+            border-color: #f87171;
+            box-shadow: 0 1px 2px rgba(0,0,0,.06);
+          }
+          50% {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+          }
         }
         .flow-title {
           font-size: 14px;
