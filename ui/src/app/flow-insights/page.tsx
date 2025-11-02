@@ -118,10 +118,16 @@ export default function FlowInsightsPage() {
 
   // Render flow tree
   useEffect(() => {
-    if (!svgRef.current) return;
+    console.log('useEffect running, svgRef.current:', svgRef.current);
+    if (!svgRef.current) {
+      console.log('SVG ref is null, returning early');
+      return;
+    }
 
     const svg = svgRef.current;
+    const ns = "http://www.w3.org/2000/svg";
     svg.innerHTML = ''; // clear
+    console.log('Starting to render flow tree...');
 
     const nodeSize = { w: 140, h: 78 };
     const vGap = 24;
@@ -157,9 +163,9 @@ export default function FlowInsightsPage() {
       const widthPerCol = nodeSize.w + colGap;
       columns.forEach((col, i) => {
         const total = col.length * nodeSize.h + (col.length - 1) * vGap;
-        let y = -total / 2;
+        let y = 50; // Add top padding
         col.forEach((n: any) => {
-          pos.set(n.id, { x: i * widthPerCol, y });
+          pos.set(n.id, { x: 50 + i * widthPerCol, y }); // Add left padding
           y += nodeSize.h + vGap;
         });
       });
@@ -191,13 +197,20 @@ export default function FlowInsightsPage() {
     const edges = buildEdges(demoTree, positions, 10);
 
     const widthPerCol = nodeSize.w + colGap;
-    const maxX = (columns.length - 1) * widthPerCol;
+    const maxX = (columns.length - 1) * widthPerCol + nodeSize.w;
     const maxColLen = Math.max(...columns.map((c: any) => c.length));
     const totalH = Math.max(300, maxColLen * (nodeSize.h + vGap));
 
-    svg.setAttribute('width', String(maxX + 400));
-    svg.setAttribute('height', String(totalH + 200));
-    svg.setAttribute('viewBox', `${-200} ${-(totalH / 2 + 50)} ${maxX + 400} ${totalH + 200}`);
+    const svgWidth = maxX + 200;
+    const svgHeight = totalH + 200;
+
+    svg.setAttribute('width', String(svgWidth));
+    svg.setAttribute('height', String(svgHeight));
+    svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+
+    console.log('SVG dimensions:', { svgWidth, svgHeight, columns: columns.length, nodes: columns.flat().length });
+    console.log('Columns:', columns);
+    console.log('Edges:', edges.length);
 
     function edgePath(e: any) {
       const dx = Math.max(60, (e.to.x - e.from.x) * 0.35);
@@ -208,42 +221,49 @@ export default function FlowInsightsPage() {
       return `M ${e.from.x} ${e.from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${e.to.x} ${e.to.y}`;
     }
 
-    function addPath(d: string, color: string, width: number) {
-      const ns = "http://www.w3.org/2000/svg";
-      const p = document.createElementNS(ns, 'path');
-      p.setAttribute('d', d);
-      p.setAttribute('fill', 'none');
-      p.setAttribute('stroke', color);
-      p.setAttribute('stroke-width', String(width));
-      p.setAttribute('stroke-linecap', 'round');
-      p.setAttribute('stroke-linejoin', 'round');
-      svg.appendChild(p);
-    }
-
+    // Draw edges (background layer)
     edges.forEach((e: any) => {
       const d = edgePath(e);
-      addPath(d, '#ffffff', (e.hasIssues ? 3 : 2.25) + 2);
-      addPath(d, e.color, (e.hasIssues ? 3 : 2.25));
+      // White outline
+      const outline = document.createElementNS(ns, 'path');
+      outline.setAttribute('d', d);
+      outline.setAttribute('fill', 'none');
+      outline.setAttribute('stroke', '#ffffff');
+      outline.setAttribute('stroke-width', String((e.hasIssues ? 3 : 2.25) + 2));
+      outline.setAttribute('stroke-linecap', 'round');
+      outline.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(outline);
+
+      // Colored line
+      const line = document.createElementNS(ns, 'path');
+      line.setAttribute('d', d);
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', e.color);
+      line.setAttribute('stroke-width', String(e.hasIssues ? 3 : 2.25));
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(line);
     });
 
+    // Draw nodes (foreground layer)
     function nodeHTML(n: any) {
       const style = severityStyle(n.issues);
       const users = `${n.users} users`;
-      const cardClass = style.cardClass === "card red" ? "flow-node-card red" : "flow-node-card";
-      const chipClass = style.chipClass === "chip red" ? "flow-node-chip red" : "flow-node-chip";
+      const cardClass = style.cardClass === "card red" ? "flow-card red" : "flow-card";
+      const chipClass = style.chipClass === "chip red" ? "flow-chip red" : "flow-chip";
       return `
         <div xmlns="http://www.w3.org/1999/xhtml" class="${cardClass}">
-          <div class="flow-node-title" title="${n.label}">${n.label}</div>
-          <div class="flow-node-meta">${users}</div>
+          <div class="flow-title" title="${n.label}">${n.label}</div>
+          <div class="flow-meta">${users}</div>
           <span class="${chipClass}">${issuesLabel(n.issues)}</span>
         </div>
       `;
     }
 
-    const ns = "http://www.w3.org/2000/svg";
     columns.forEach((col: any) => {
       col.forEach((n: any) => {
         const pos = positions.get(n.id);
+        console.log('Creating node:', n.id, 'at position:', pos);
         const fo = document.createElementNS(ns, 'foreignObject');
         fo.setAttribute('x', String(pos.x));
         fo.setAttribute('y', String(pos.y));
@@ -253,7 +273,9 @@ export default function FlowInsightsPage() {
         svg.appendChild(fo);
       });
     });
-  }, []);
+
+    console.log('Total elements in SVG:', svg.children.length);
+  }, [bootLoading]); // Re-run when bootLoading changes
 
   const handleExport = () => {
     if (!svgRef.current) return;
@@ -364,12 +386,12 @@ export default function FlowInsightsPage() {
       </div>
 
       {/* Flow Canvas */}
-      <div style={{ border: '1px solid #edf2f7', borderRadius: 12, overflow: 'auto', height: 520 }}>
-        <svg ref={svgRef} style={{ display: 'block', transformOrigin: 'left top', transform: `scale(${zoom})` }} />
+      <div style={{ border: '1px solid #edf2f7', borderRadius: 12, overflow: 'auto', height: 520, background: '#f9fafb' }}>
+        <svg ref={svgRef} style={{ display: 'block', transformOrigin: 'left top', transform: `scale(${zoom})`, background: '#f9fafb' }} />
       </div>
 
       <style dangerouslySetInnerHTML={{__html: `
-        .flow-node-card {
+        .flow-card {
           position: relative;
           min-width: 140px;
           max-width: 140px;
@@ -381,11 +403,11 @@ export default function FlowInsightsPage() {
           padding: 8px 12px;
           overflow: hidden;
         }
-        .flow-node-card.red {
+        .flow-card.red {
           border-color: #f87171;
           background: #fff5f5;
         }
-        .flow-node-title {
+        .flow-title {
           font-size: 14px;
           font-weight: 600;
           color: #1f2937;
@@ -393,12 +415,12 @@ export default function FlowInsightsPage() {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .flow-node-meta {
+        .flow-meta {
           margin-top: 4px;
           font-size: 11px;
           color: #4b5563;
         }
-        .flow-node-chip {
+        .flow-chip {
           position: absolute;
           right: 8px;
           bottom: 8px;
@@ -409,7 +431,7 @@ export default function FlowInsightsPage() {
           color: #4b5563;
           background: #fff;
         }
-        .flow-node-chip.red {
+        .flow-chip.red {
           background: #ef4444;
           color: #fff;
           border-color: transparent;
