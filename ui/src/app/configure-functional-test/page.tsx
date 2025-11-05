@@ -16,15 +16,16 @@ export default function CreateRunUnifiedPage() {
   const [projectName, setProjectName] = useState('');
   const [page, setPage] = useState('');
   const [figmaUrl, setFigmaUrl] = useState('');
-  const [testType, setTestType] = useState<'figma'|'webapp'>('figma');
+  const [testType, setTestType] = useState<'figma'|'webapp'>('webapp');
   const [appUrl, setAppUrl] = useState('');
-  const [maxMinutes, setMaxMinutes] = useState(2);
+  const [maxMinutes, setMaxMinutes] = useState(25);
   const [taskName, setTaskName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [expectedUrl, setExpectedUrl] = useState('');
   const [requiredElements, setRequiredElements] = useState('');
   const [excludedElements, setExcludedElements] = useState('');
+  const [numAgents, setNumAgents] = useState(6);
   const [step, setStep] = useState<'choose'|'preprocess'|'tests'|'personas'|'done'>('choose');
   const [loading, setLoading] = useState(false);
   const [preprocessInfo, setPreprocessInfo] = useState<any|null>(null);
@@ -76,7 +77,7 @@ export default function CreateRunUnifiedPage() {
   const unifiedEnabled = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_UNIFIED_FLOW === '1' || process.env.NEXT_PUBLIC_UNIFIED_FLOW === 'true') : true;
   const STATE_KEY = 'sparrow_launch_state_v1';
   const restoredRef = useRef(false);
-  const previousTestTypeRef = useRef<'figma'|'webapp'>(testType);
+  const previousTestTypeRef = useRef<'figma'|'webapp'>('webapp');
 
   // Reset form when testType changes (toggle between Web App and Design File)
   useEffect(() => {
@@ -94,6 +95,7 @@ export default function CreateRunUnifiedPage() {
       setExpectedUrl('');
       setRequiredElements('');
       setExcludedElements('');
+      setNumAgents(6);
       setSourceFile(null);
       setTargetFile(null);
       setTasks([
@@ -417,35 +419,62 @@ export default function CreateRunUnifiedPage() {
 
   async function startPreprocess(e: React.FormEvent) {
     e.preventDefault();
-    if (useExisting && !selectedProjectId) { setShowErrorsChoose(true); return; }
-    if (!useExisting && testType === 'figma' && (!figmaUrl || !projectName)) { setShowErrorsChoose(true); return; }
-    if (!useExisting && testType === 'webapp' && (!appUrl || !projectName)) { setShowErrorsChoose(true); return; }
+    console.log('[startPreprocess] Called with:', { useExisting, testType, appUrl, projectName, figmaUrl, selectedProjectId });
+
+    if (useExisting && !selectedProjectId) {
+      console.log('[startPreprocess] Validation failed: useExisting but no selectedProjectId');
+      setShowErrorsChoose(true);
+      return;
+    }
+    if (!useExisting && testType === 'figma' && (!figmaUrl || !projectName)) {
+      console.log('[startPreprocess] Validation failed: figma mode missing figmaUrl or projectName');
+      setShowErrorsChoose(true);
+      return;
+    }
+    if (!useExisting && testType === 'webapp' && (!appUrl || !projectName)) {
+      console.log('[startPreprocess] Validation failed: webapp mode missing appUrl or projectName');
+      setShowErrorsChoose(true);
+      return;
+    }
+
+    console.log('[startPreprocess] Validation passed, setting loading to true');
     setLoading(true);
     try {
       if (useExisting) {
         // Skip to tests step directly; ensure project is ready via status API
+        console.log('[startPreprocess] Using existing project, skipping to tests step');
         setStep('tests');
       } else if (testType === 'webapp') {
         // Web app testing: Create project (preprocess) then move to test setup
+        console.log('[startPreprocess] Creating new webapp project...');
         const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+        const payload = {
+          projectName: projectName || 'Web App Project',
+          appUrl,
+          email: email || undefined,
+          password: password || undefined,
+        };
+        console.log('[startPreprocess] Calling /api/preprocess-webapp with payload:', payload);
+
         const r = await fetch('/api/preprocess-webapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({
-            projectName: projectName || 'Web App Project',
-            appUrl,
-            email: email || undefined,
-            password: password || undefined,
-          }),
+          body: JSON.stringify(payload),
         });
+
+        console.log('[startPreprocess] Response status:', r.status);
         const data = await r.json();
+        console.log('[startPreprocess] Response data:', data);
+
         if (!r.ok) throw new Error(data?.detail || data?.error || 'Failed to create web app project');
 
         // Store project info and move to tests step
         setPreprocessInfo(data);
+        console.log('[startPreprocess] Project created successfully, moving to tests step');
         setStep('tests');
       } else {
         // Figma testing: preprocess as usual
+        console.log('[startPreprocess] Creating figma project...');
         const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
         const r = await fetch('/api/preprocess', {
           method: 'POST',
@@ -459,9 +488,12 @@ export default function CreateRunUnifiedPage() {
         setStep('preprocess');
       }
     } catch (err:any) {
+      console.error('[startPreprocess] Error occurred:', err);
       alert(String(err?.message || err || 'Failed'));
+    } finally {
+      console.log('[startPreprocess] Setting loading to false');
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function startTests(e: React.FormEvent) {
@@ -531,47 +563,38 @@ export default function CreateRunUnifiedPage() {
       const projectId = useExisting ? selectedProjectId : String(preprocessInfo?.db?.project_id || '');
       if (!projectId) throw new Error('Missing projectId');
 
-      // Handle Web App Tests (Phase 4: Multi-persona support)
+      // Handle Web App Tests - Exploratory Testing Only
       if (testType === 'webapp') {
-        if (!goal) {
-          alert('Please configure the test goal before starting.');
+        if (!taskName) {
+          alert('Please provide a task name for exploratory testing.');
           setLoading(false);
           return;
         }
 
         const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
 
-        // Build personas array for Phase 4
-        const personas = personaConfigs.map(p => ({
-          personaId: p.personaId,
-          name: p.name || `Persona ${p.personaId}`,  // Fixed: use short name, not full traits
-          traits: p.traits,
-          users: p.users
-        }));
-
-        const r = await fetch('/api/web-app-tests', {
+        const r = await fetch('/api/exploratory-web-app-tests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({
             projectId,
-            goal,
-            maxMinutes: 5,
-            taskName: taskName || undefined,
+            taskName,
+            numAgents,
+            maxMinutes,
+            goal: goal || undefined,
             expectedUrl: expectedUrl || undefined,
             requiredElements: requiredElements ? requiredElements.split(',').map(e => e.trim()).filter(Boolean) : undefined,
             excludedElements: excludedElements ? excludedElements.split(',').map(e => e.trim()).filter(Boolean) : undefined,
-            personas: personas.length > 0 ? personas : undefined
           }),
         });
 
         const data = await r.json();
-        if (!r.ok) throw new Error(data?.detail || data?.error || 'web app test failed');
+        if (!r.ok) throw new Error(data?.detail || data?.error || 'exploratory test failed');
 
-        // Handle batch response (Phase 4) - Single run_id architecture
         const rid = String(data?.run_id || '');
         if (rid) {
           setActiveRunId(rid);
-          setActiveTaskName(taskName || goal);
+          setActiveTaskName(taskName);
         }
 
         const now = Date.now();
@@ -913,32 +936,34 @@ export default function CreateRunUnifiedPage() {
   }
 
   function renderTests() {
-    // Web App Test Setup
+    // Web App Test Setup - Exploratory Testing Only
     if (testType === 'webapp') {
       return (
         <div className="tile">
           <form onSubmit={(e) => {
             e.preventDefault();
-            if (!goal) { setShowErrorsTests(true); return; }
-            // Navigate to persona selection instead of starting test immediately
+            // For exploratory tests: only taskName is required
+            if (!taskName) { setShowErrorsTests(true); return; }
+            // Continue to personas step
             setStep('personas');
           }} className={showErrorsTests ? 'show-errors' : undefined}>
             <div style={{ marginBottom: 24 }}>
               <h3 style={{ margin: 0, marginBottom: 8, fontSize: 20, fontWeight: 700 }}>Test Setup</h3>
               <p style={{ margin: 0, color: '#64748B', fontSize: 14 }}>
-                Configure your web app test with a goal and success validation criteria
+                Configure your exploratory test
               </p>
             </div>
 
-            {/* Test Name */}
+            {/* Task Name - Required */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
-                Test Name
+                Task Name <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 value={taskName}
                 onChange={(e)=>setTaskName(e.target.value)}
                 placeholder="e.g., pricing-navigation"
+                required
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -952,17 +977,71 @@ export default function CreateRunUnifiedPage() {
               />
             </div>
 
-            {/* Test Description */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
-                Test Description <span style={{ color: '#DC2626' }}>*</span>
-              </label>
+            {/* Exploratory Test Configuration */}
+            <div style={{ background: '#F0F9FF', padding: 16, borderRadius: 8, marginBottom: 20 }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: 15, fontWeight: 600, color: '#0F172A' }}>
+                Exploratory Settings
+              </h4>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
+                  Number of Agents
+                </label>
+                <input
+                  type="number"
+                  value={numAgents}
+                  onChange={(e) => setNumAgents(parseInt(e.target.value) || 6)}
+                  min={1}
+                  max={20}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                    border: '1px solid #BFDBFE',
+                    borderRadius: 8,
+                    background: 'white'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
+                  Max Duration (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={maxMinutes}
+                  onChange={(e) => setMaxMinutes(parseInt(e.target.value) || 25)}
+                  min={1}
+                  max={60}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                    border: '1px solid #BFDBFE',
+                    borderRadius: 8,
+                    background: 'white'
+                  }}
+                />
+              </div>
+
+              <div style={{ padding: 12, background: '#DBEAFE', borderRadius: 6, fontSize: 13, color: '#1E40AF' }}>
+                🤖 {numAgents} agents will explore your app in parallel
+                <br />
+                ⚡ Estimated speedup: {(numAgents * 0.85).toFixed(1)}x
+              </div>
+            </div>
+
+            {/* Optional Goal */}
+            <details style={{ marginBottom: 20 }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14, marginBottom: 8, color: '#0F172A' }}>
+                Advanced: Add Goal (Optional)
+              </summary>
               <textarea
                 value={goal}
                 onChange={(e)=>setGoal(e.target.value)}
-                required
-                placeholder="Describe what the AI should accomplish (e.g., Navigate to the pricing page and find the enterprise plan)"
-                rows={3}
+                placeholder="Optional: Specific goal to achieve (e.g., Find checkout flow)"
+                rows={2}
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -970,13 +1049,10 @@ export default function CreateRunUnifiedPage() {
                   border: '1px solid #E2E8F0',
                   borderRadius: 8,
                   resize: 'vertical',
-                  lineHeight: 1.5,
-                  transition: 'border-color 0.15s ease'
+                  marginTop: 8
                 }}
-                onFocus={(e) => e.target.style.borderColor = '#3B82F6'}
-                onBlur={(e) => e.target.style.borderColor = '#E2E8F0'}
               />
-            </div>
+            </details>
 
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
@@ -1383,7 +1459,8 @@ export default function CreateRunUnifiedPage() {
         )}
         {String(activeRunStatus || '').toUpperCase() === 'COMPLETED' && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Link className="btn-ghost" href="/reports">View Result</Link>
+            <Link className="btn-ghost" href="/reports">View Results</Link>
+            <Link className="btn-primary" href="/flow-insights">Flow Insights</Link>
         </div>
         )}
       </div>
@@ -1392,7 +1469,11 @@ export default function CreateRunUnifiedPage() {
 
   function renderPersonas() {
     return (
-      <PersonaPicker onLaunch={(configs, exclusive) => launchRun(configs as any, exclusive)} onBack={() => setStep('tests')} />
+      <PersonaPicker
+        onLaunch={(configs, exclusive) => launchRun(configs as any, exclusive)}
+        onBack={() => setStep('tests')}
+        personasOptional={true}
+      />
     );
   }
 
