@@ -6,7 +6,15 @@ import Link from 'next/link';
 type Persona = { id: string; name: string; bio?: string };
 type PersonaConfig = { personaId: string; traits: string; users: string; collapsed?: boolean };
 
-export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs: any[], exclusiveUsers: boolean) => void; onBack?: () => void; }) {
+export default function PersonaPicker({
+  onLaunch,
+  onBack,
+  personasOptional = false
+}: {
+  onLaunch: (configs: any[], exclusiveUsers: boolean) => void;
+  onBack?: () => void;
+  personasOptional?: boolean;
+}) {
   const [personas, setPersonas] = React.useState<Persona[]>([]);
   const [cards, setCards] = React.useState<PersonaConfig[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
@@ -160,10 +168,19 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
     console.log('[PersonaPicker] launch() called');
     console.log('[PersonaPicker] selectedPersonas:', selectedPersonas);
     console.log('[PersonaPicker] personas:', personas);
+    console.log('[PersonaPicker] personasOptional:', personasOptional);
 
-    // Validate: at least one persona selected, total users <= 3000
+    // Validate: at least one persona selected (unless personas are optional), total users <= 3000
     if (selectedPersonas.size === 0) {
-      alert('Please select at least one persona.');
+      if (!personasOptional) {
+        alert('Please select at least one persona.');
+        return;
+      }
+      // If personas are optional and none selected, just launch with empty config
+      setLoading(true);
+      console.log('[PersonaPicker] Calling onLaunch with empty personas (optional mode)');
+      onLaunch([], exclusiveUsers);
+      setLoading(false);
       return;
     }
 
@@ -217,8 +234,8 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div>
-            <h1 className="page-title">Select Personas for Test</h1>
-            <p className="meta">Choose personas and set users per group.</p>
+            <h1 className="page-title">Select Personas for Test{personasOptional && ' (Optional)'}</h1>
+            <p className="meta">{personasOptional ? 'Optionally choose personas and set users per group, or continue without personas.' : 'Choose personas and set users per group.'}</p>
           </div>
         </div>
       </header>
@@ -357,7 +374,7 @@ export default function PersonaPicker({ onLaunch, onBack }: { onLaunch: (configs
               <button
                 className="btn btn-primary"
                 onClick={launch}
-                disabled={selectedPersonas.size === 0 || loading || isOverLimit}
+                disabled={(!personasOptional && selectedPersonas.size === 0) || loading || isOverLimit}
               >
                 {loading ? 'Starting Test…' : 'Start Test'}
               </button>
