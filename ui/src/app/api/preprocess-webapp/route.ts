@@ -7,9 +7,12 @@ export async function POST(req: NextRequest) {
     return new Response('Missing required parameters: projectName and appUrl', { status: 400 });
   }
 
-  const api = process.env.SPARROW_API || '';
+  const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || '';
   if (!api) {
-    return new Response('SPARROW_API not configured', { status: 500 });
+    return new Response(JSON.stringify({ error: 'Backend API not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    });
   }
 
   const auth = req.headers.get('authorization') || '';
@@ -37,8 +40,17 @@ export async function POST(req: NextRequest) {
       status: r.status,
       headers: { 'Content-Type': ct.includes('application/json') ? ct : 'application/json; charset=utf-8' }
     });
-  } catch (error) {
-    console.error('Error calling preprocess-webapp API:', error);
-    return new Response('Failed to create web app project', { status: 500 });
+  } catch (err: any) {
+    console.error('Error proxying preprocess-webapp request:', err);
+    return new Response(
+      JSON.stringify({
+        error: 'Backend unreachable',
+        detail: String(err?.message || err)
+      }),
+      {
+        status: 502,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      }
+    );
   }
 }
