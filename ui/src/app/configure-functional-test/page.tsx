@@ -73,6 +73,7 @@ export default function CreateRunUnifiedPage() {
   const [completedProjectIds, setCompletedProjectIds] = useState<string[]>([]);
   const [defaultCompletedProjectId, setDefaultCompletedProjectId] = useState('');
   const [hasAnyProjects, setHasAnyProjects] = useState<boolean>(true);
+  const [showTestSetup, setShowTestSetup] = useState(false);
 
   const unifiedEnabled = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_UNIFIED_FLOW === '1' || process.env.NEXT_PUBLIC_UNIFIED_FLOW === 'true') : true;
   const STATE_KEY = 'sparrow_launch_state_v1';
@@ -441,11 +442,11 @@ export default function CreateRunUnifiedPage() {
     setLoading(true);
     try {
       if (useExisting) {
-        // Skip to tests step directly; ensure project is ready via status API
-        console.log('[startPreprocess] Using existing project, skipping to tests step');
-        setStep('tests');
+        // Show test setup section below
+        console.log('[startPreprocess] Using existing project, showing test setup');
+        setShowTestSetup(true);
       } else if (testType === 'webapp') {
-        // Web app testing: Create project (preprocess) then move to test setup
+        // Web app testing: Create project (preprocess) then show test setup
         console.log('[startPreprocess] Creating new webapp project...');
         const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
         const payload = {
@@ -468,10 +469,10 @@ export default function CreateRunUnifiedPage() {
 
         if (!r.ok) throw new Error(data?.detail || data?.error || 'Failed to create web app project');
 
-        // Store project info and move to tests step
+        // Store project info and show test setup
         setPreprocessInfo(data);
-        console.log('[startPreprocess] Project created successfully, moving to tests step');
-        setStep('tests');
+        console.log('[startPreprocess] Project created successfully, showing test setup');
+        setShowTestSetup(true);
       } else {
         // Figma testing: preprocess as usual
         console.log('[startPreprocess] Creating figma project...');
@@ -775,90 +776,137 @@ export default function CreateRunUnifiedPage() {
       );
     }
     return (
-      <div className="tile">
-        <form onSubmit={startPreprocess} className={showErrorsChoose ? 'show-errors' : undefined}>
-          <h3>Select Project</h3>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
-            <SegmentedToggle
-              value={useExisting ? 'existing' : 'new'}
-              options={[
-                { key: 'new', label: 'New Project', icon: <IconPlus width={16} height={16} /> },
-                { key: 'existing', label: 'Existing Project', icon: <IconLayers width={16} height={16} /> },
-              ]}
-              onChange={(k) => setUseExisting(k === 'existing')}
-            />
-          </div>
-          {useExisting ? (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <label>Project</label>
-              <FancySelect
-                value={selectedProjectId}
-                onChange={setSelectedProjectId}
-                placeholder="Select a project"
-                // Only show COMPLETED projects in dropdown
-                options={projects.map(p => ({ value: p.id, label: p.name || p.id }))}
-                searchable={true}
+      <>
+        <div className="tile">
+          <form onSubmit={startPreprocess} className={showErrorsChoose ? 'show-errors' : undefined}>
+            <h3>Select Project</h3>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+              <SegmentedToggle
+                value={useExisting ? 'existing' : 'new'}
+                options={[
+                  { key: 'new', label: 'New Project', icon: <IconPlus width={16} height={16} /> },
+                  { key: 'existing', label: 'Existing Project', icon: <IconLayers width={16} height={16} /> },
+                ]}
+                onChange={(k) => setUseExisting(k === 'existing')}
               />
             </div>
-          ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <label>Project Name</label>
-              <input value={projectName} onChange={(e)=>setProjectName(e.target.value)} placeholder="My Project" required />
-
-              <label>Provide Staging URL</label>
-              <input value={appUrl} onChange={(e)=>setAppUrl(e.target.value)} required placeholder="https://staging.example.com" type="url" />
-
-              <label>Email</label>
-              <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="user@example.com" type="email" />
-
-              <label>Password</label>
-              <input value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Enter password if login required" type="password" />
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-            <button
-              className="btn-primary"
-              disabled={loading || (useExisting && (!selectedProjectId || projects.length === 0))}
-              type="submit"
-            >
-              {loading ? 'Working...' : (useExisting ? 'Continue' : 'Create project')}
-            </button>
-          </div>
-        </form>
-
-        {!useExisting && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <h3 style={{ margin: 0 }}>Recent Project</h3>
-          {loadingRecent ? (
-            <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
-          ) : recent ? (
-            <div style={{ display: 'grid', gridTemplateColumns: recent.figma_page ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12, marginTop: 10 }}>
-              <div>
-                <div className="muted">Name</div>
-                <div style={{ fontWeight: 700 }}>{recent.project_name || recent.name}</div>
+            {useExisting ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <label>Project</label>
+                <FancySelect
+                  value={selectedProjectId}
+                  onChange={setSelectedProjectId}
+                  placeholder="Select a project"
+                  // Only show COMPLETED projects in dropdown
+                  options={projects.map(p => ({ value: p.id, label: p.name || p.id }))}
+                  searchable={true}
+                />
               </div>
-              {recent.figma_page && (
+            ) : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <label>Project Name</label>
+                <input value={projectName} onChange={(e)=>setProjectName(e.target.value)} placeholder="My Project" required />
+
+                <label>Provide Staging URL</label>
+                <input value={appUrl} onChange={(e)=>setAppUrl(e.target.value)} required placeholder="https://staging.example.com" type="url" />
+
+                <label>Email</label>
+                <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="user@example.com" type="email" />
+
+                <label>Password</label>
+                <input value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Enter password if login required" type="password" />
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button
+                className="btn-primary"
+                disabled={loading || (useExisting && (!selectedProjectId || projects.length === 0))}
+                type="submit"
+              >
+                {loading ? 'Working...' : (useExisting ? 'Select' : 'Create project')}
+              </button>
+            </div>
+          </form>
+
+          {!useExisting && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <h3 style={{ margin: 0 }}>Recent Project</h3>
+            {loadingRecent ? (
+              <p className="muted" style={{ marginTop: 8 }}>Loading…</p>
+            ) : recent ? (
+              <div style={{ display: 'grid', gridTemplateColumns: recent.figma_page ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12, marginTop: 10 }}>
                 <div>
-                  <div className="muted">Page</div>
-                  <div>{recent.figma_page}</div>
+                  <div className="muted">Name</div>
+                  <div style={{ fontWeight: 700 }}>{recent.project_name || recent.name}</div>
                 </div>
-              )}
-              <div>
-                <div className="muted">Status</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>{renderStatus(recent.status)}</div>
-                  {String(recent.status).toUpperCase() !== 'COMPLETED' && (
-                    <div className="muted" style={{ fontVariantNumeric: 'tabular-nums' }}>{formatElapsed(elapsedSec)}</div>
-                  )}
+                {recent.figma_page && (
+                  <div>
+                    <div className="muted">Page</div>
+                    <div>{recent.figma_page}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="muted">Status</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>{renderStatus(recent.status)}</div>
+                    {String(recent.status).toUpperCase() !== 'COMPLETED' && (
+                      <div className="muted" style={{ fontVariantNumeric: 'tabular-nums' }}>{formatElapsed(elapsedSec)}</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <p className="muted" style={{ marginTop: 8 }}>No recent project found.</p>
+            ) : (
+              <p className="muted" style={{ marginTop: 8 }}>No recent project found.</p>
+            )}
+          </div>
           )}
         </div>
+
+        {/* Test Setup Section - shown after project selection */}
+        {showTestSetup && (
+          <div className="tile" style={{ marginTop: 16 }}>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              // Continue to personas step
+              setStep('personas');
+            }} className={showErrorsTests ? 'show-errors' : undefined}>
+              <div style={{ marginBottom: 24 }}>
+                <h3 style={{ margin: 0, marginBottom: 8, fontSize: 20, fontWeight: 700 }}>Test Setup</h3>
+              </div>
+
+              {/* Credit Card Details */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
+                  Enter Credit Card Details
+                </label>
+                <input
+                  value={taskName}
+                  onChange={(e)=>setTaskName(e.target.value)}
+                  placeholder="Enter credit card details"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                    border: '1px solid #E2E8F0',
+                    borderRadius: 8,
+                    transition: 'border-color 0.15s ease'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#3B82F6'}
+                  onBlur={(e) => e.target.style.borderColor = '#E2E8F0'}
+                />
+              </div>
+
+              {/* Action Button */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                <button className="btn-primary" disabled={loading} type="submit" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <IconPlus width={18} height={18} />
+                  Run Test
+                </button>
+              </div>
+            </form>
+          </div>
         )}
-      </div>
+      </>
     );
   }
 
@@ -942,28 +990,22 @@ export default function CreateRunUnifiedPage() {
         <div className="tile">
           <form onSubmit={(e) => {
             e.preventDefault();
-            // For exploratory tests: only taskName is required
-            if (!taskName) { setShowErrorsTests(true); return; }
             // Continue to personas step
             setStep('personas');
           }} className={showErrorsTests ? 'show-errors' : undefined}>
             <div style={{ marginBottom: 24 }}>
               <h3 style={{ margin: 0, marginBottom: 8, fontSize: 20, fontWeight: 700 }}>Test Setup</h3>
-              <p style={{ margin: 0, color: '#64748B', fontSize: 14 }}>
-                Configure your exploratory test
-              </p>
             </div>
 
-            {/* Task Name - Required */}
+            {/* Credit Card Details */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
-                Task Name <span style={{ color: '#DC2626' }}>*</span>
+                Enter Credit Card Details
               </label>
               <input
                 value={taskName}
                 onChange={(e)=>setTaskName(e.target.value)}
-                placeholder="e.g., pricing-navigation"
-                required
+                placeholder="Enter credit card details"
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -977,90 +1019,11 @@ export default function CreateRunUnifiedPage() {
               />
             </div>
 
-            {/* Exploratory Test Configuration */}
-            <div style={{ background: '#F0F9FF', padding: 16, borderRadius: 8, marginBottom: 20 }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: 15, fontWeight: 600, color: '#0F172A' }}>
-                Exploratory Settings
-              </h4>
-
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
-                  Number of Agents
-                </label>
-                <input
-                  type="number"
-                  value={numAgents}
-                  onChange={(e) => setNumAgents(parseInt(e.target.value) || 6)}
-                  min={1}
-                  max={20}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    border: '1px solid #BFDBFE',
-                    borderRadius: 8,
-                    background: 'white'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
-                  Max Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  value={maxMinutes}
-                  onChange={(e) => setMaxMinutes(parseInt(e.target.value) || 25)}
-                  min={1}
-                  max={60}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    border: '1px solid #BFDBFE',
-                    borderRadius: 8,
-                    background: 'white'
-                  }}
-                />
-              </div>
-
-              <div style={{ padding: 12, background: '#DBEAFE', borderRadius: 6, fontSize: 13, color: '#1E40AF' }}>
-                🤖 {numAgents} agents will explore your app in parallel
-                <br />
-                ⚡ Estimated speedup: {(numAgents * 0.85).toFixed(1)}x
-              </div>
-            </div>
-
-            {/* Optional Goal */}
-            <details style={{ marginBottom: 20 }}>
-              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14, marginBottom: 8, color: '#0F172A' }}>
-                Advanced: Add Goal (Optional)
-              </summary>
-              <textarea
-                value={goal}
-                onChange={(e)=>setGoal(e.target.value)}
-                placeholder="Optional: Specific goal to achieve (e.g., Find checkout flow)"
-                rows={2}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  fontSize: 14,
-                  border: '1px solid #E2E8F0',
-                  borderRadius: 8,
-                  resize: 'vertical',
-                  marginTop: 8
-                }}
-              />
-            </details>
-
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-              <button type="button" className="btn-ghost" onClick={() => setStep('choose')} disabled={loading}>
-                Back
-              </button>
-              <button className="btn-primary" disabled={loading} type="submit">
-                Continue to Personas
+            {/* Action Button */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+              <button className="btn-primary" disabled={loading} type="submit" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconPlus width={18} height={18} />
+                Run Test
               </button>
             </div>
           </form>
@@ -1517,7 +1480,7 @@ export default function CreateRunUnifiedPage() {
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div className="dash-header" style={{ marginBottom: 0 }}>Launch Functional Test</div>
+            <div className="dash-header" style={{ marginBottom: 0 }}>Test Application</div>
           </div>
           {bootLoading ? (
             <div className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160 }}>
@@ -1525,26 +1488,6 @@ export default function CreateRunUnifiedPage() {
             </div>
           ) : (
             <>
-              <div className="tile" style={{ marginBottom: 12, padding: 12, minHeight: 'unset' as any }}>
-            <StepIndicator
-              steps={[
-                { label: 'Project' },
-                    { label: 'Test Setup' },
-                    { label: 'Personas' },
-                { label: 'Results' },
-              ]}
-                  activeIndex={(step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3}
-                  onStepClick={(idx) => {
-                    // Only allow navigating to current/past steps
-                    const currentIdx = (step === 'choose' || step === 'preprocess') ? 0 : step === 'tests' ? 1 : step === 'personas' ? 2 : 3;
-                    if (idx > currentIdx) return;
-                    if (idx === 0) setStep('choose');
-                    else if (idx === 1) setStep('tests');
-                    else if (idx === 2) setStep('personas');
-                    else setStep('done');
-                  }}
-            />
-          </div>
           {step === 'choose' && renderChoose()}
           {step === 'preprocess' && renderPreprocess()}
           {step === 'tests' && renderTests()}

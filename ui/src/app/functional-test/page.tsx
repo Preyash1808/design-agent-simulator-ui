@@ -54,7 +54,7 @@ export default function FunctionalTestPage() {
             onClick={handleCreateNewTest}
           >
             <IconPlus width={18} height={18} />
-            <span>Create new test</span>
+            <span>Create new project</span>
           </button>
         </div>
       </div>

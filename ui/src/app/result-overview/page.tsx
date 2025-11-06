@@ -292,7 +292,7 @@ export default function ResultOverviewPage() {
       </div>
 
       <div className="grid" style={{ gap: 12, marginTop: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div>
           <label style={{ fontSize: 14, fontWeight: 700 }}>
             Project
             <FancySelect
@@ -305,29 +305,6 @@ export default function ResultOverviewPage() {
               placeholder="Select project"
               options={projects.map(p => ({ value: p.id, label: p.name }))}
               searchable={false}
-              compact
-            />
-          </label>
-          <label style={{ fontSize: 14, fontWeight: 700 }}>
-            Task
-            <FancySelect
-              value={selectedGoal}
-              onChange={(val) => {
-                setSelectedGoal(val);
-              }}
-              placeholder={selectedProject ? "Select a task" : "Select project first"}
-              options={goals.filter((g: Goal) => g.project_id === selectedProject).map(g => ({
-                value: g.id,
-                label: (
-                  <div style={{ display:'flex', flexDirection:'column' }}>
-                    <span style={{ fontWeight:600, color:'#0F172A' }}>{g.task_name || (g.goal || `Goal ${g.id.slice(0,8)}`)}</span>
-                    {g.task_id != null && (
-                      <span style={{ fontSize:11, color:'#94A3B8', fontWeight: 500 }}>ID: task-{g.task_id}</span>
-                    )}
-                  </div>
-                ) as any
-              }))}
-              searchable={true}
               compact
             />
           </label>

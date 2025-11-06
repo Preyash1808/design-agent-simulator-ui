@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
     label: 'Launch Functional Test',
     icon: <IconFourSquare width={18} height={18} />,
     subItems: [
-      { href: '/configure-functional-test', label: 'Configure Test' },
+      { href: '/configure-functional-test', label: 'Test Application' },
       { href: '/flow-insights', label: 'Flow Insights' },
       { href: '/result-overview', label: 'Result Overview' }
     ]

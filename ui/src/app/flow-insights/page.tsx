@@ -463,8 +463,8 @@ export default function FlowInsightsPage() {
       </div>
 
       <div className="grid" style={{ gap: 12, marginTop: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <label style={{ fontSize: 14, fontWeight: 700 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+          <label style={{ fontSize: 14, fontWeight: 700, flex: '0 0 420px' }}>
             Project
             <FancySelect
               value={selectedProject}
@@ -479,29 +479,14 @@ export default function FlowInsightsPage() {
               compact
             />
           </label>
-          <label style={{ fontSize: 14, fontWeight: 700 }}>
-            Task
-            <FancySelect
-              value={selectedGoal}
-              onChange={(val) => {
-                setSelectedGoal(val);
-              }}
-              placeholder={selectedProject ? "Select a task" : "Select project first"}
-              options={goals.filter((g: Goal) => g.project_id === selectedProject).map(g => ({
-                value: g.id,
-                label: (
-                  <div style={{ display:'flex', flexDirection:'column' }}>
-                    <span style={{ fontWeight:600, color:'#0F172A' }}>{g.task_name || (g.goal || `Goal ${g.id.slice(0,8)}`)}</span>
-                    {g.task_id != null && (
-                      <span style={{ fontSize:11, color:'#94A3B8', fontWeight: 500 }}>ID: task-{g.task_id}</span>
-                    )}
-                  </div>
-                ) as any
-              }))}
-              searchable={true}
-              compact
-            />
-          </label>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button className="btn-primary" style={{ padding: '8px 16px', fontSize: 14 }}>
+              Run Test Again
+            </button>
+            <button onClick={handleExport} className="btn-ghost" style={{ padding: '8px 16px', fontSize: 14 }}>
+              Download
+            </button>
+          </div>
         </div>
         {(loading || error || loadingFlow || flowError) && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -527,9 +512,6 @@ export default function FlowInsightsPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 }}>
         <div style={{ fontSize: 14, color: '#4b5563' }}>Flow Tree — columns = depth, smooth connectors</div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <button onClick={handleExport} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 12, padding: '6px 12px', fontSize: 14, cursor: 'pointer' }}>
-            Export
-          </button>
           <label style={{ fontSize: 14, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 8 }}>
             Zoom
             <input
