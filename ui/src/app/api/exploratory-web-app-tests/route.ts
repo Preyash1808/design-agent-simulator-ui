@@ -1,10 +1,13 @@
 import { NextRequest } from 'next/server';
 
-export async function POST(req: NextRequest) {
-  const { projectId, goal, maxMinutes, taskName, expectedUrl, requiredElements, excludedElements, personas } = await req.json();
+export const fetchCache = 'force-no-store';
+export const dynamic = 'force-dynamic';
 
-  if (!projectId || !goal) {
-    return new Response('Missing required parameters: projectId and goal', { status: 400 });
+export async function POST(req: NextRequest) {
+  const { projectId, taskName, numAgents, maxMinutes, goal, expectedUrl, requiredElements, excludedElements } = await req.json();
+
+  if (!projectId) {
+    return new Response('Missing required parameter: projectId', { status: 400 });
   }
 
   const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || '';
@@ -18,7 +21,7 @@ export async function POST(req: NextRequest) {
   const auth = req.headers.get('authorization') || '';
 
   try {
-    const r = await fetch(`${api}/runs/web-app-tests`, {
+    const r = await fetch(`${api}/runs/exploratory-web-app-tests`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -26,13 +29,13 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         projectId,
-        goal,
-        maxMinutes: maxMinutes ?? 5,
-        taskName,
-        expectedUrl,
-        requiredElements,
-        excludedElements,
-        personas: personas || undefined
+        numAgents: numAgents ?? 6,
+        maxMinutes: maxMinutes ?? 25,
+        taskName: taskName || undefined,
+        goal: goal || undefined,
+        expectedUrl: expectedUrl || undefined,
+        requiredElements: requiredElements || undefined,
+        excludedElements: excludedElements || undefined,
       }),
     });
 
@@ -44,7 +47,7 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': ct.includes('application/json') ? ct : 'application/json; charset=utf-8' }
     });
   } catch (err: any) {
-    console.error('Error proxying web-app-tests request:', err);
+    console.error('Error proxying exploratory-web-app-tests request:', err);
     return new Response(
       JSON.stringify({
         error: 'Backend unreachable',

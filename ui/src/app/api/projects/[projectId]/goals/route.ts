@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { projectId: string } }
+  { params }: { params: Promise<{ projectId: string }> }
 ) {
   const api = process.env.SPARROW_API || process.env.NEXT_PUBLIC_SPARROW_API || '';
   if (!api) {
@@ -17,7 +17,7 @@ export async function GET(
 
   try {
     const auth = req.headers.get('authorization') || '';
-    const projectId = params.projectId;
+    const { projectId } = await params;
 
     const url = `${api}/projects/${encodeURIComponent(projectId)}/goals`;
     const r = await fetch(url, {
