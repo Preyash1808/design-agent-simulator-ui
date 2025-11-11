@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from 'react';
+import jsPDF from 'jspdf';
 
 type TestCase = {
   id: string;
@@ -93,14 +94,340 @@ export default function ResultOverviewPage() {
     return true;
   });
 
+  // PDF Download Handler
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    let yPosition = margin;
+
+    // Helper function to add new page if needed
+    const checkAndAddPage = (requiredSpace: number) => {
+      if (yPosition + requiredSpace > pageHeight - margin) {
+        doc.addPage();
+        yPosition = margin;
+        return true;
+      }
+      return false;
+    };
+
+    // Helper function to wrap text
+    const wrapText = (text: string, maxWidth: number) => {
+      return doc.splitTextToSize(text, maxWidth);
+    };
+
+    // Header - QA Report
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('QA Report', margin, yPosition);
+    yPosition += 10;
+
+    // Generated Date
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    const generatedDate = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    doc.text(`Generated: ${generatedDate}`, margin, yPosition);
+    yPosition += 15;
+
+    // Metrics Section
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('Summary', margin, yPosition);
+    yPosition += 8;
+
+    // Metric Cards
+    const cardWidth = (pageWidth - margin * 2 - 10) / 3;
+    const cardHeight = 25;
+    const cardSpacing = 5;
+
+    // Total Tests Card
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(margin, yPosition, cardWidth, cardHeight, 3, 3, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 100, 100);
+    doc.text('TOTAL TESTS', margin + 5, yPosition + 7);
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text(totalTests.toString(), margin + 5, yPosition + 18);
+
+    // Pass Rate Card
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(margin + cardWidth + cardSpacing, yPosition, cardWidth, cardHeight, 3, 3, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 100, 100);
+    doc.text('PASS RATE', margin + cardWidth + cardSpacing + 5, yPosition + 7);
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text(`${passRate}%`, margin + cardWidth + cardSpacing + 5, yPosition + 18);
+
+    // Total Issues Card
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(margin + (cardWidth + cardSpacing) * 2, yPosition, cardWidth, cardHeight, 3, 3, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 100, 100);
+    doc.text('TOTAL ISSUES', margin + (cardWidth + cardSpacing) * 2 + 5, yPosition + 7);
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text(totalIssues.toString(), margin + (cardWidth + cardSpacing) * 2 + 5, yPosition + 18);
+
+    yPosition += cardHeight + 15;
+
+    // Test Cases Section - Spreadsheet Style
+    checkAndAddPage(30);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('Test Cases', margin, yPosition);
+    yPosition += 8;
+
+    // Column widths for 4-column layout (Number, Test Case, Error, Repro Steps)
+    const colGap = 2;
+    const numColWidth = 10;
+    const testCaseColWidth = 45;
+    const errorColWidth = 55;
+    const reproColWidth = 60;
+
+    const numColX = margin;
+    const testCaseColX = numColX + numColWidth + colGap;
+    const errorColX = testCaseColX + testCaseColWidth + colGap;
+    const reproColX = errorColX + errorColWidth + colGap;
+
+    // Draw table header
+    doc.setFillColor(240, 240, 240);
+    doc.rect(numColX, yPosition, numColWidth, 8, 'F');
+    doc.rect(testCaseColX, yPosition, testCaseColWidth, 8, 'F');
+    doc.rect(errorColX, yPosition, errorColWidth, 8, 'F');
+    doc.rect(reproColX, yPosition, reproColWidth, 8, 'F');
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('No.', numColX + 2, yPosition + 5.5);
+    doc.text('Test Case', testCaseColX + 2, yPosition + 5.5);
+    doc.text('Error', errorColX + 2, yPosition + 5.5);
+    doc.text('Repro Steps', reproColX + 2, yPosition + 5.5);
+
+    yPosition += 8;
+
+    // Draw header border
+    doc.setDrawColor(180, 180, 180);
+    doc.line(margin, yPosition, margin + numColWidth + testCaseColWidth + errorColWidth + reproColWidth + colGap * 3, yPosition);
+    yPosition += 1;
+
+    // Iterate through all test cases
+    DUMMY_TEST_CASES.forEach((test, index) => {
+      const rowStartY = yPosition;
+
+      // Calculate row height based on content
+      const reproSteps = [
+        'Navigate to the test page',
+        `Perform action: ${test.name}`,
+        'Observe the result'
+      ];
+
+      let maxRowHeight = 12; // minimum height with padding
+
+      // Calculate test case column height
+      let testCaseHeight = 5; // Base height for test name
+
+      // Calculate error column height
+      let errorHeight = 5; // Base height
+      if (test.status === 'failed' && test.issues && test.issues.length > 0) {
+        errorHeight = test.issues.reduce((acc, issue) => {
+          const titleLines = wrapText(`${issue.title}: ${issue.description}`, errorColWidth - 4);
+          return acc + (titleLines.length * 3.5) + 6; // 6 = badge height + spacing
+        }, 2);
+      }
+
+      // Calculate repro steps height with proper spacing
+      const reproHeight = reproSteps.reduce((acc, step, idx) => {
+        const stepLines = wrapText(`${idx + 1}. ${step}`, reproColWidth - 4);
+        return acc + (stepLines.length * 3.5);
+      }, 2);
+
+      // Use the maximum of all column heights plus padding
+      maxRowHeight = Math.max(maxRowHeight, testCaseHeight, errorHeight, reproHeight) + 4; // +4 for top/bottom padding
+
+      // Check if we need a new page
+      checkAndAddPage(maxRowHeight + 5);
+
+      const finalRowStartY = yPosition; // Update after potential page break
+
+      // Draw row background based on status
+      if (test.status === 'passed') {
+        doc.setFillColor(240, 253, 244);
+      } else {
+        doc.setFillColor(254, 242, 242);
+      }
+      doc.rect(numColX, finalRowStartY, numColWidth + testCaseColWidth + errorColWidth + reproColWidth + colGap * 3, maxRowHeight, 'F');
+
+      // COLUMN 1: Number
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 0);
+      doc.text((index + 1).toString(), numColX + 2, finalRowStartY + 5);
+
+      // COLUMN 2: Test Case
+      let testCaseY = finalRowStartY + 5;
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+
+      // Test name
+      const testNameLines = wrapText(test.name, testCaseColWidth - 4);
+      doc.text(testNameLines[0], testCaseColX + 2, testCaseY);
+
+      // COLUMN 3: Error details
+      let errorY = finalRowStartY + 5;
+      if (test.status === 'failed' && test.issues && test.issues.length > 0) {
+        test.issues.forEach((issue, issueIdx) => {
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(0, 0, 0);
+
+          // Issue type badge
+          let badgeWidth = 15;
+          if (issue.type === 'Network') {
+            doc.setFillColor(224, 231, 255);
+            doc.setTextColor(67, 56, 202);
+          } else if (issue.type === 'Accessibility') {
+            doc.setFillColor(209, 250, 229);
+            doc.setTextColor(4, 120, 87);
+            badgeWidth = 22;
+          } else {
+            doc.setFillColor(254, 243, 199);
+            doc.setTextColor(146, 64, 14);
+          }
+
+          doc.roundedRect(errorColX + 2, errorY - 2, badgeWidth, 3, 0.5, 0.5, 'F');
+          doc.setFontSize(6);
+          doc.text(issue.type, errorColX + 3, errorY);
+          errorY += 4;
+
+          // Error description
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(0, 0, 0);
+          const errorLines = wrapText(`${issue.title}: ${issue.description}`, errorColWidth - 4);
+          errorLines.forEach((line) => {
+            doc.text(line, errorColX + 2, errorY);
+            errorY += 3.5;
+          });
+
+          errorY += 2;
+        });
+      } else {
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text('-', errorColX + 2, errorY);
+      }
+
+      // COLUMN 4: Reproduction Steps
+      let reproY = finalRowStartY + 5;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+
+      reproSteps.forEach((step, idx) => {
+        const stepLines = wrapText(`${idx + 1}. ${step}`, reproColWidth - 4);
+        stepLines.forEach((line) => {
+          doc.text(line, reproColX + 2, reproY);
+          reproY += 3.5;
+        });
+      });
+
+      yPosition = finalRowStartY + maxRowHeight;
+
+      // Draw row border
+      doc.setDrawColor(220, 220, 220);
+      doc.line(numColX, yPosition, numColX + numColWidth + testCaseColWidth + errorColWidth + reproColWidth + colGap * 3, yPosition);
+    });
+
+    // Save the PDF
+    doc.save(`QA-Report-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div className="content">
       {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 className="dash-header">Result Overview</h1>
-        <p className="dash-sub">
-          Testing individual subgoals with visual, network, and functional issue detection
-        </p>
+      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <h1 className="dash-header">Result Overview</h1>
+          <p className="dash-sub">
+            Testing individual subgoals with visual, network, and functional issue detection
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn-sm"
+            style={{
+              marginTop: '4px',
+              background: '#0F172A',
+              color: '#FFFFFF',
+              border: '1px solid #0F172A',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.15)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              borderRadius: '999px',
+              padding: '8px 12px',
+              fontWeight: 700,
+              letterSpacing: '.2px',
+              cursor: 'pointer',
+              transition: 'transform .05s ease, background .2s ease, box-shadow .2s ease'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#1E293B'}
+            onMouseOut={(e) => e.currentTarget.style.background = '#0F172A'}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            Run Test Again
+          </button>
+          <button
+            className="btn-sm"
+            onClick={handleDownloadPDF}
+            style={{
+              marginTop: '4px',
+              background: '#3B82F6',
+              color: '#FFFFFF',
+              border: '1px solid #3B82F6',
+              boxShadow: '0 1px 2px rgba(59,130,246,0.15)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              borderRadius: '999px',
+              padding: '8px 12px',
+              fontWeight: 700,
+              letterSpacing: '.2px',
+              cursor: 'pointer',
+              transition: 'transform .05s ease, background .2s ease, box-shadow .2s ease'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#2563EB'}
+            onMouseOut={(e) => e.currentTarget.style.background = '#3B82F6'}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            Download
+          </button>
+        </div>
       </div>
 
       {/* Metric Cards */}

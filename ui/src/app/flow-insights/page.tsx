@@ -483,9 +483,6 @@ export default function FlowInsightsPage() {
             <button className="btn-primary" style={{ padding: '8px 16px', fontSize: 14 }}>
               Run Test Again
             </button>
-            <button onClick={handleExport} className="btn-ghost" style={{ padding: '8px 16px', fontSize: 14 }}>
-              Download
-            </button>
           </div>
         </div>
         {(loading || error || loadingFlow || flowError) && (
