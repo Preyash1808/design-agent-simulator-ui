@@ -17,7 +17,7 @@ import io
 import csv
 import zipfile
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, Header, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, Header, HTTPException, BackgroundTasks, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse, Response
 
 from ..storage import (
@@ -55,12 +55,42 @@ router = APIRouter()
 
 
 @router.get('/runs/{run_id}/report.pdf')
-async def generate_pdf_report(run_id: str):
+async def generate_pdf_report(
+    run_id: str,
+    section: str = Query('overview'),
+    personaId: Optional[str] = Query(None)
+):
     try:
         data = await get_run_metrics_public(run_id)
     except Exception:
         raise HTTPException(status_code=404, detail='run not found')
-    pdf_bytes = build_report_pdf(data, run_id)
+
+    # Try to fetch project name from database
+    project_name = None
+    if use_supabase_db():
+        try:
+            client = get_supabase()
+            # Get project_id from runs table
+            run_result = client.table('runs').select('project_id').eq('id', run_id).limit(1).execute()
+            if run_result.data and run_result.data[0].get('project_id'):
+                project_id = run_result.data[0]['project_id']
+                # Get project name from projects table
+                project_result = client.table('projects').select('name').eq('id', project_id).limit(1).execute()
+                if project_result.data:
+                    project_name = project_result.data[0].get('name')
+        except Exception as e:
+            print(f"Failed to fetch project name: {e}")
+
+    # Note: persona data handling can be added here if needed for persona-specific reports
+    # For now, we'll pass the section and personaId parameters as-is
+    pdf_bytes = build_report_pdf(
+        data,
+        run_id,
+        section=section,
+        persona=None,  # TODO: Fetch persona data when implementing persona reports
+        persona_id=personaId,
+        project_name=project_name
+    )
     headers = {
         'Content-Disposition': f'attachment; filename="report_{run_id}.pdf"',
         'Content-Length': str(len(pdf_bytes)),
@@ -2014,6 +2044,27 @@ async def start_preprocess(req: PreprocessReq, authorization: Optional[str] = He
             return
 
         db_project_id: Optional[str] = None
+        project_name = req.project_name or req.page
+
+        # Check if project name already exists for this owner
+        try:
+            if use_supabase_db():
+                log_message(f"Checking for existing project with name '{project_name}'...")
+                existing = get_supabase().table('projects').select('id').eq('owner_id', owner_id).eq('name', project_name).limit(1).execute()
+                if existing.data:
+                    fail_process(f"Project with name '{project_name}' already exists. Please use a unique project name.")
+                    return
+            else:
+                log_message(f"Checking for existing project with name '{project_name}'...")
+                existing_row = await fetchrow('select id from projects where owner_id=$1 and name=$2', owner_id, project_name)
+                if existing_row:
+                    fail_process(f"Project with name '{project_name}' already exists. Please use a unique project name.")
+                    return
+        except Exception as e:
+            log_message(f"Error checking for existing project: {e}", level="ERROR")
+            fail_process(f"Failed to validate project name: {e}")
+            return
+
         try:
             if use_supabase_db():
                 log_message("Inserting project row into Supabase...")
@@ -2021,7 +2072,7 @@ async def start_preprocess(req: PreprocessReq, authorization: Optional[str] = He
                 res = get_supabase().table('projects').insert({
                     'id': candidate_db_project_id,
                     'owner_id': owner_id,
-                    'name': req.project_name or req.page,
+                    'name': project_name,
                     'figma_url': req.figma_url,
                     'figma_page': req.page,
                     'status': 'INPROGRESS',
@@ -2038,7 +2089,7 @@ async def start_preprocess(req: PreprocessReq, authorization: Optional[str] = He
                     'insert into projects (id, owner_id, name, figma_url, figma_page, status, kind) '
                     'values ($1,$2,$3,$4,$5,$6,$7) returning id',
                     candidate_db_project_id, owner_id,
-                    req.project_name or req.page, req.figma_url, req.page, 'INITIATED', 'figma'
+                    project_name, req.figma_url, req.page, 'INITIATED', 'figma'
                 )
                 db_project_id = str(row['id']) if row else None
                 if db_project_id:

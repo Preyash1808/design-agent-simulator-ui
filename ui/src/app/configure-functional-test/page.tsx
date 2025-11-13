@@ -566,12 +566,6 @@ export default function CreateRunUnifiedPage() {
 
       // Handle Web App Tests - Exploratory Testing Only
       if (testType === 'webapp') {
-        if (!taskName) {
-          alert('Please provide a task name for exploratory testing.');
-          setLoading(false);
-          return;
-        }
-
         const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
 
         const r = await fetch('/api/exploratory-web-app-tests', {

@@ -56,6 +56,8 @@ export default function FlowInsightsPage() {
   const [flowData, setFlowData] = useState<any>(null);
   const [loadingFlow, setLoadingFlow] = useState(false);
   const [flowError, setFlowError] = useState("");
+  const [launchingTest, setLaunchingTest] = useState(false);
+  const [launchSuccess, setLaunchSuccess] = useState(false);
 
   // Track if we've done initial auto-selection
   const hasAutoSelectedProject = useRef(false);
@@ -89,63 +91,67 @@ export default function FlowInsightsPage() {
       const headers: Record<string, string> = { 'Accept': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      // Use status API like Reports page to get runs
-      const res = await fetch('/api/status?attach_signed_urls=0', { headers, cache: 'no-store' });
-      if (!res.ok) throw new Error('Failed to load status');
-      const data = await res.json();
+      // Load all projects from the projects API
+      const projectsRes = await fetch('/api/projects', { headers, cache: 'no-store' });
+      if (!projectsRes.ok) throw new Error('Failed to load projects');
+      const projectsData = await projectsRes.json();
+      const allProjects: any[] = Array.isArray(projectsData?.projects) ? projectsData.projects : [];
 
-      // Extract and store owner_id from response
-      if (data.owner_id) {
-        setOwnerId(data.owner_id);
-        console.log('[Flow Insights] Extracted owner_id from status API:', data.owner_id);
+      // Map projects to our Project type
+      const mappedProjects: Project[] = allProjects.map(p => ({
+        id: String(p.id),
+        name: String(p.name || p.id),
+        kind: p.kind,
+        created_at: p.created_at,
+        updated_at: p.updated_at
+      }));
+
+      setProjects(mappedProjects);
+
+      // Also get owner_id and runs from status API
+      const statusRes = await fetch('/api/status?attach_signed_urls=0', { headers, cache: 'no-store' });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+
+        // Extract and store owner_id from response
+        if (statusData.owner_id) {
+          setOwnerId(statusData.owner_id);
+          console.log('[Flow Insights] Extracted owner_id from status API:', statusData.owner_id);
+        }
+
+        // Filter to only webapp_tests runs and store them
+        const allRuns = (statusData.items || []).filter((x: any) => String(x.type).toLowerCase() === 'run');
+        const webappRuns = allRuns.filter((x: any) => String(x.kind || '').toLowerCase() === 'webapp_tests');
+
+        setGoals(webappRuns.map((r: any) => ({
+          id: r.id,
+          task_name: r.task_name,
+          task_id: r.task_id,
+          goal: r.goal,
+          status: r.status,
+          finished_at: r.finished_at,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          project_id: r.project_id
+        })));
       }
 
-      // Filter to only webapp_tests runs
-      const allRuns = (data.items || []).filter((x: any) => String(x.type).toLowerCase() === 'run');
-      const webappRuns = allRuns.filter((x: any) => String(x.kind || '').toLowerCase() === 'webapp_tests');
-
-      // Extract unique projects from runs
-      const projectMap = new Map<string, Project>();
-      webappRuns.forEach((run: any) => {
-        if (run.project_id && !projectMap.has(run.project_id)) {
-          projectMap.set(run.project_id, {
-            id: run.project_id,
-            name: run.project_name || run.name || 'Unnamed Project',
-            kind: run.kind,
-            created_at: run.created_at,
-            updated_at: run.updated_at || run.finished_at
-          });
-        }
-      });
-
-      const functionalProjects = Array.from(projectMap.values());
-      setProjects(functionalProjects);
-
-      // Store all runs for later filtering
-      setGoals(webappRuns.map((r: any) => ({
-        id: r.id,
-        task_name: r.task_name,
-        task_id: r.task_id,
-        goal: r.goal,
-        status: r.status,
-        finished_at: r.finished_at,
-        created_at: r.created_at,
-        updated_at: r.updated_at,
-        project_id: r.project_id
-      })));
-
-      // Auto-select the most recently created project (only once on initial load)
-      if (functionalProjects.length > 0 && !hasAutoSelectedProject.current) {
+      // Always auto-select the most recently created project if none is selected
+      if (mappedProjects.length > 0) {
         // Sort by updated_at descending (most recent first)
-        const sorted = [...functionalProjects].sort((a, b) => {
+        const sorted = [...mappedProjects].sort((a, b) => {
           const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
           const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
           return dateB - dateA;
         });
         const mostRecent = sorted[0];
-        console.log('[Flow Insights] Auto-selecting most recent project:', mostRecent.name);
-        setSelectedProject(mostRecent.id);
-        hasAutoSelectedProject.current = true;
+
+        // If no project is currently selected, or selected project is not in the list, select the most recent
+        if (!selectedProject || !mappedProjects.find(p => p.id === selectedProject)) {
+          console.log('[Flow Insights] Auto-selecting most recent project:', mostRecent.name);
+          setSelectedProject(mostRecent.id);
+          hasAutoSelectedProject.current = true;
+        }
       }
     } catch (err) {
       console.error('Error loading projects:', err);
@@ -227,6 +233,63 @@ export default function FlowInsightsPage() {
       setFlowError(err.message || 'Failed to load flow data');
     } finally {
       setLoadingFlow(false);
+    }
+  }
+
+  async function handleRunTestAgain() {
+    if (!selectedProject) {
+      alert('Please select a project first');
+      return;
+    }
+
+    // If a specific run is selected, use its parameters, otherwise use defaults
+    let taskName = undefined;
+    let goal = undefined;
+
+    if (selectedGoal) {
+      const selectedRun = goals.find(g => g.id === selectedGoal);
+      if (selectedRun) {
+        taskName = selectedRun.task_name;
+        goal = selectedRun.goal;
+      }
+    }
+
+    try {
+      setLaunchingTest(true);
+      setLaunchSuccess(false);
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+
+      const response = await fetch('/api/exploratory-web-app-tests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          projectId: selectedProject,
+          taskName: taskName || undefined,
+          goal: goal || undefined,
+          numAgents: 6,
+          maxMinutes: 25
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to launch test');
+      }
+
+      setLaunchSuccess(true);
+      alert('Test launched successfully!');
+
+      // Reload projects to show the new run
+      await loadProjects();
+    } catch (err: any) {
+      console.error('Error launching test:', err);
+      alert(`Failed to launch test: ${err.message}`);
+    } finally {
+      setLaunchingTest(false);
     }
   }
 
@@ -469,9 +532,11 @@ export default function FlowInsightsPage() {
             <FancySelect
               value={selectedProject}
               onChange={(val) => {
-                setSelectedProject(val);
-                setSelectedGoal('');
-                setGoals([]);
+                if (val) { // Only allow non-empty selections
+                  setSelectedProject(val);
+                  setSelectedGoal('');
+                  setGoals([]);
+                }
               }}
               placeholder="Select project"
               options={projects.map(p => ({ value: p.id, label: p.name }))}
@@ -480,8 +545,13 @@ export default function FlowInsightsPage() {
             />
           </label>
           <div style={{ display: 'flex', gap: 12 }}>
-            <button className="btn-primary" style={{ padding: '8px 16px', fontSize: 14 }}>
-              Run Test Again
+            <button
+              className="btn-primary"
+              style={{ padding: '8px 16px', fontSize: 14 }}
+              onClick={handleRunTestAgain}
+              disabled={launchingTest || !selectedProject}
+            >
+              {launchingTest ? 'Launching...' : 'Run Test Again'}
             </button>
           </div>
         </div>
@@ -496,11 +566,6 @@ export default function FlowInsightsPage() {
         {!loadingFlow && !flowError && flowData && useRealData && (
           <div style={{ fontSize: 14, color: '#10b981', marginTop: 8 }}>
             ✓ Loaded {flowData.totalStates} states and {flowData.totalTransitions} transitions
-          </div>
-        )}
-        {!useRealData && (
-          <div style={{ fontSize: 14, color: '#f59e0b', marginTop: 8 }}>
-            ⚠ Using demo data (set NEXT_PUBLIC_USE_REAL_DATA=true to use real data)
           </div>
         )}
       </div>

@@ -69,7 +69,7 @@ def getUserColor(index: int, total: int) -> str:
     return f'#{(index * 137 % 256):02x}{(index * 97 % 256):02x}{(index * 71 % 256):02x}'
 
 
-def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overview', persona: Optional[Dict[str, Any]] = None, persona_id: Optional[str] = None) -> bytes:
+def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overview', persona: Optional[Dict[str, Any]] = None, persona_id: Optional[str] = None, project_name: Optional[str] = None) -> bytes:
     """Builds a PDF report.
 
     Args:
@@ -78,6 +78,7 @@ def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overv
         section: 'overview' | 'persona' | 'full'.
         persona: Optional persona detail payload (when including persona section).
         persona_id: Optional persona id for labeling.
+        project_name: Optional project name to display in report.
 
     Returns:
         Raw PDF bytes.
@@ -306,7 +307,24 @@ def build_report_pdf(data: Dict[str, Any], run_id: str, *, section: str = 'overv
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
     story.append(accent)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 12))
+
+    # Add Project name and Generated date metadata
+    from datetime import datetime
+    meta_style = ParagraphStyle(
+        'MetaStyle',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=colors.HexColor('#6b7280'),
+        spaceAfter=2,
+    )
+
+    if project_name:
+        story.append(Paragraph(f'<b>Project:</b> {sanitize_text(project_name)}', meta_style))
+
+    generated_date = datetime.now().strftime('%B %d, %Y at %I:%M %p')
+    story.append(Paragraph(f'<b>Generated on:</b> {generated_date}', meta_style))
+    story.append(Spacer(1, 14))
 
     # Helper to add the Overview section
     def add_overview_section():

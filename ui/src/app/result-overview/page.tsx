@@ -1,6 +1,10 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import jsPDF from 'jspdf';
+import FancySelect from '../../components/FancySelect';
+
+type Project = { id: string; name: string; run_dir?: string; kind?: string; created_at?: string; updated_at?: string };
 
 type TestCase = {
   id: string;
@@ -62,6 +66,11 @@ type FilterType = 'all' | 'passed' | 'failed';
 type IssueFilterType = 'all' | 'visual' | 'network' | 'accessibility';
 
 export default function ResultOverviewPage() {
+  const router = useRouter();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<FilterType>('all');
   const [issueFilter, setIssueFilter] = useState<IssueFilterType>('all');
@@ -94,6 +103,63 @@ export default function ResultOverviewPage() {
     return true;
   });
 
+  // Load projects from API
+  async function loadProjects() {
+    try {
+      setLoading(true);
+      setError('');
+      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
+      const headers: Record<string, string> = { 'Accept': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      // Load all projects from the projects API
+      const res = await fetch('/api/projects', { headers, cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to load projects');
+      const data = await res.json();
+      const allProjects: any[] = Array.isArray(data?.projects) ? data.projects : [];
+
+      // Map projects to our Project type
+      const mappedProjects: Project[] = allProjects.map(p => ({
+        id: String(p.id),
+        name: String(p.name || p.id),
+        kind: p.kind,
+        created_at: p.created_at,
+        updated_at: p.updated_at
+      }));
+
+      setProjects(mappedProjects);
+
+      // Always auto-select the most recently created project if none is selected
+      if (mappedProjects.length > 0) {
+        const sorted = [...mappedProjects].sort((a, b) => {
+          const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+          const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+          return dateB - dateA;
+        });
+        const mostRecent = sorted[0];
+
+        // If no project is currently selected, or selected project is not in the list, select the most recent
+        if (!selectedProject || !mappedProjects.find(p => p.id === selectedProject)) {
+          setSelectedProject(mostRecent.id);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading projects:', err);
+      setError('Failed to load projects');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  // Run Test Again Handler
+  const handleRunTestAgain = () => {
+    router.push('/configure-functional-test');
+  };
+
   // PDF Download Handler
   const handleDownloadPDF = () => {
     const doc = new jsPDF();
@@ -123,6 +189,15 @@ export default function ResultOverviewPage() {
     doc.text('QA Report', margin, yPosition);
     yPosition += 10;
 
+    // Project Name
+    const selectedProjectObj = projects.find(p => p.id === selectedProject);
+    const projectName = selectedProjectObj?.name || 'Unknown Project';
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(60, 60, 60);
+    doc.text(`Project: ${projectName}`, margin, yPosition);
+    yPosition += 6;
+
     // Generated Date
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
@@ -134,7 +209,7 @@ export default function ResultOverviewPage() {
       hour: '2-digit',
       minute: '2-digit'
     });
-    doc.text(`Generated: ${generatedDate}`, margin, yPosition);
+    doc.text(`Generated on: ${generatedDate}`, margin, yPosition);
     yPosition += 15;
 
     // Metrics Section
@@ -364,74 +439,97 @@ export default function ResultOverviewPage() {
   };
 
   return (
-    <div className="content">
+    <div className="card">
       {/* Header */}
-      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <h1 className="dash-header">Result Overview</h1>
-          <p className="dash-sub">
-            Testing individual subgoals with visual, network, and functional issue detection
-          </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <h2 style={{ margin: 0 }}>Result Overview</h2>
+      </div>
+
+      {/* Project Selector and Actions */}
+      <div className="grid" style={{ gap: 12, marginTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+          <label style={{ fontSize: 14, fontWeight: 700, flex: '0 0 420px' }}>
+            Project
+            <FancySelect
+              value={selectedProject}
+              onChange={(val) => {
+                if (val) { // Only allow non-empty selections
+                  setSelectedProject(val);
+                }
+              }}
+              placeholder="Select project"
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              searchable={false}
+              compact
+            />
+          </label>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              className="btn-sm"
+              onClick={handleRunTestAgain}
+              style={{
+                padding: '8px 16px',
+                fontSize: 14,
+                background: '#0F172A',
+                color: '#FFFFFF',
+                border: '1px solid #0F172A',
+                boxShadow: '0 1px 2px rgba(15,23,42,0.15)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                borderRadius: '999px',
+                fontWeight: 700,
+                letterSpacing: '.2px',
+                cursor: 'pointer',
+                transition: 'transform .05s ease, background .2s ease, box-shadow .2s ease'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.background = '#1E293B'}
+              onMouseOut={(e) => e.currentTarget.style.background = '#0F172A'}
+              onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
+              onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              Run Test Again
+            </button>
+            <button
+              className="btn-sm"
+              onClick={handleDownloadPDF}
+              style={{
+                padding: '8px 16px',
+                fontSize: 14,
+                background: '#3B82F6',
+                color: '#FFFFFF',
+                border: '1px solid #3B82F6',
+                boxShadow: '0 1px 2px rgba(59,130,246,0.15)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                borderRadius: '999px',
+                fontWeight: 700,
+                letterSpacing: '.2px',
+                cursor: 'pointer',
+                transition: 'transform .05s ease, background .2s ease, box-shadow .2s ease'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.background = '#2563EB'}
+              onMouseOut={(e) => e.currentTarget.style.background = '#3B82F6'}
+              onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
+              onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              Download
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            className="btn-sm"
-            style={{
-              marginTop: '4px',
-              background: '#0F172A',
-              color: '#FFFFFF',
-              border: '1px solid #0F172A',
-              boxShadow: '0 1px 2px rgba(15,23,42,0.15)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              borderRadius: '999px',
-              padding: '8px 12px',
-              fontWeight: 700,
-              letterSpacing: '.2px',
-              cursor: 'pointer',
-              transition: 'transform .05s ease, background .2s ease, box-shadow .2s ease'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.background = '#1E293B'}
-            onMouseOut={(e) => e.currentTarget.style.background = '#0F172A'}
-            onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
-            onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            Run Test Again
-          </button>
-          <button
-            className="btn-sm"
-            onClick={handleDownloadPDF}
-            style={{
-              marginTop: '4px',
-              background: '#3B82F6',
-              color: '#FFFFFF',
-              border: '1px solid #3B82F6',
-              boxShadow: '0 1px 2px rgba(59,130,246,0.15)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              borderRadius: '999px',
-              padding: '8px 12px',
-              fontWeight: 700,
-              letterSpacing: '.2px',
-              cursor: 'pointer',
-              transition: 'transform .05s ease, background .2s ease, box-shadow .2s ease'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.background = '#2563EB'}
-            onMouseOut={(e) => e.currentTarget.style.background = '#3B82F6'}
-            onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
-            onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            Download
-          </button>
-        </div>
+        {(loading || error) && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {loading && <span className="muted">Loading projects…</span>}
+            {error && <span className="muted" style={{ color: '#fca5a5' }}>{error}</span>}
+          </div>
+        )}
       </div>
 
       {/* Metric Cards */}
-      <div className="dash-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+      <div className="dash-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginTop: '24px' }}>
         {/* Total Tests Card */}
         <div className="tile">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
