@@ -868,15 +868,15 @@ export default function CreateRunUnifiedPage() {
                 <h3 style={{ margin: 0, marginBottom: 8, fontSize: 20, fontWeight: 700 }}>Test Setup</h3>
               </div>
 
-              {/* Credit Card Details */}
+              {/* Add Variables */}
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
-                  Enter Credit Card Details
+                  Add variables
                 </label>
                 <input
                   value={taskName}
                   onChange={(e)=>setTaskName(e.target.value)}
-                  placeholder="Enter credit card details"
+                  placeholder="Add variables like credit card details"
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -991,15 +991,15 @@ export default function CreateRunUnifiedPage() {
               <h3 style={{ margin: 0, marginBottom: 8, fontSize: 20, fontWeight: 700 }}>Test Setup</h3>
             </div>
 
-            {/* Credit Card Details */}
+            {/* Add Variables */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#0F172A' }}>
-                Enter Credit Card Details
+                Add variables
               </label>
               <input
                 value={taskName}
                 onChange={(e)=>setTaskName(e.target.value)}
-                placeholder="Enter credit card details"
+                placeholder="Add variables like credit card details"
                 style={{
                   width: '100%',
                   padding: '10px 12px',

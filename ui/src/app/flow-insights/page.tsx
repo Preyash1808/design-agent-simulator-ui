@@ -56,8 +56,6 @@ export default function FlowInsightsPage() {
   const [flowData, setFlowData] = useState<any>(null);
   const [loadingFlow, setLoadingFlow] = useState(false);
   const [flowError, setFlowError] = useState("");
-  const [launchingTest, setLaunchingTest] = useState(false);
-  const [launchSuccess, setLaunchSuccess] = useState(false);
 
   // Track if we've done initial auto-selection
   const hasAutoSelectedProject = useRef(false);
@@ -236,63 +234,6 @@ export default function FlowInsightsPage() {
     }
   }
 
-  async function handleRunTestAgain() {
-    if (!selectedProject) {
-      alert('Please select a project first');
-      return;
-    }
-
-    // If a specific run is selected, use its parameters, otherwise use defaults
-    let taskName = undefined;
-    let goal = undefined;
-
-    if (selectedGoal) {
-      const selectedRun = goals.find(g => g.id === selectedGoal);
-      if (selectedRun) {
-        taskName = selectedRun.task_name;
-        goal = selectedRun.goal;
-      }
-    }
-
-    try {
-      setLaunchingTest(true);
-      setLaunchSuccess(false);
-
-      const token = typeof window !== 'undefined' ? localStorage.getItem('sparrow_token') : null;
-
-      const response = await fetch('/api/exploratory-web-app-tests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          projectId: selectedProject,
-          taskName: taskName || undefined,
-          goal: goal || undefined,
-          numAgents: 6,
-          maxMinutes: 25
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to launch test');
-      }
-
-      setLaunchSuccess(true);
-      alert('Test launched successfully!');
-
-      // Reload projects to show the new run
-      await loadProjects();
-    } catch (err: any) {
-      console.error('Error launching test:', err);
-      alert(`Failed to launch test: ${err.message}`);
-    } finally {
-      setLaunchingTest(false);
-    }
-  }
-
   useEffect(() => {
     loadProjects();
   }, []);
@@ -336,7 +277,7 @@ export default function FlowInsightsPage() {
     function severityStyle(issues: any[]) {
       const has = Array.isArray(issues) && issues.length > 0;
       return {
-        stroke: has ? "#ef4444" : "#9ca3af",
+        stroke: "#000000", // Black
         cardClass: has ? "card red" : "card",
         chipClass: has ? "chip red" : "chip",
       };
@@ -413,11 +354,11 @@ export default function FlowInsightsPage() {
     console.log('Edges:', edges.length);
 
     function edgePath(e: any) {
-      const dx = Math.max(60, (e.to.x - e.from.x) * 0.35);
+      const dx = Math.max(60, (e.to.x - e.from.x) * 0.4);
       const c1x = e.from.x + dx;
-      const c1y = e.from.y + e.offset;
+      const c1y = e.from.y; // Keep control point at same y level as start
       const c2x = e.to.x - dx;
-      const c2y = e.to.y;
+      const c2y = e.to.y; // Keep control point at same y level as end
       return `M ${e.from.x} ${e.from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${e.to.x} ${e.to.y}`;
     }
 
@@ -527,8 +468,8 @@ export default function FlowInsightsPage() {
 
       <div className="grid" style={{ gap: 12, marginTop: 12 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
-          <label style={{ fontSize: 14, fontWeight: 700, flex: '0 0 420px' }}>
-            Project
+          <label style={{ fontSize: 14, fontWeight: 700, flex: '0 0 420px', listStyle: 'none', display: 'grid', gap: '6px' }}>
+            <span style={{ listStyle: 'none' }}>Project</span>
             <FancySelect
               value={selectedProject}
               onChange={(val) => {
@@ -544,16 +485,6 @@ export default function FlowInsightsPage() {
               compact
             />
           </label>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button
-              className="btn-primary"
-              style={{ padding: '8px 16px', fontSize: 14 }}
-              onClick={handleRunTestAgain}
-              disabled={launchingTest || !selectedProject}
-            >
-              {launchingTest ? 'Launching...' : 'Run Test Again'}
-            </button>
-          </div>
         </div>
         {(loading || error || loadingFlow || flowError) && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -571,8 +502,7 @@ export default function FlowInsightsPage() {
       </div>
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 }}>
-        <div style={{ fontSize: 14, color: '#4b5563' }}>Flow Tree — columns = depth, smooth connectors</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 16, marginBottom: 8 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <label style={{ fontSize: 14, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 8 }}>
             Zoom
@@ -741,7 +671,7 @@ export default function FlowInsightsPage() {
           max-width: 140px;
           height: 78px;
           border-radius: 16px;
-          border: 2px solid #9ca3af;
+          border: 2px solid #000000;
           background: #fff;
           box-shadow: 0 1px 2px rgba(0,0,0,.06);
           padding: 8px 12px;

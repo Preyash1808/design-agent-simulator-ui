@@ -76,6 +76,7 @@ export default function ResultOverviewPage() {
   const [issueFilter, setIssueFilter] = useState<IssueFilterType>('all');
   const [selectedTest, setSelectedTest] = useState<TestCase | null>(null);
   const [activeTab, setActiveTab] = useState<'issues' | 'repro'>('issues');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Calculate metrics
   const totalTests = DUMMY_TEST_CASES.length;
@@ -157,7 +158,12 @@ export default function ResultOverviewPage() {
 
   // Run Test Again Handler
   const handleRunTestAgain = () => {
-    router.push('/configure-functional-test');
+    setShowConfirmModal(true);
+  };
+
+  const confirmRunTestAgain = () => {
+    setShowConfirmModal(false);
+    // TODO: Add API call to run test again
   };
 
   // PDF Download Handler
@@ -448,8 +454,8 @@ export default function ResultOverviewPage() {
       {/* Project Selector and Actions */}
       <div className="grid" style={{ gap: 12, marginTop: 12 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
-          <label style={{ fontSize: 14, fontWeight: 700, flex: '0 0 420px' }}>
-            Project
+          <label style={{ fontSize: 14, fontWeight: 700, flex: '0 0 420px', listStyle: 'none', display: 'grid', gap: '6px' }}>
+            <span style={{ listStyle: 'none' }}>Project</span>
             <FancySelect
               value={selectedProject}
               onChange={(val) => {
@@ -532,13 +538,10 @@ export default function ResultOverviewPage() {
       <div className="dash-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginTop: '24px' }}>
         {/* Total Tests Card */}
         <div className="tile">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ marginBottom: '12px' }}>
             <h4 style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Total Tests
             </h4>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted-subtle)" strokeWidth="2">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-            </svg>
           </div>
           <div className="stat" style={{ marginBottom: '12px' }}>
             {totalTests}
@@ -897,6 +900,76 @@ export default function ResultOverviewPage() {
           )}
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+          onClick={() => setShowConfirmModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              padding: '24px',
+              maxWidth: '500px',
+              width: '90%',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 700, color: '#0F172A' }}>
+              Confirm run test again!
+            </h3>
+            <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: '#64748B', lineHeight: '1.5' }}>
+              By confirming, you will lose access to the previous test runs. We recommend downloading report first.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #E2E8F0',
+                  backgroundColor: 'white',
+                  color: '#64748B',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRunTestAgain}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#0F172A',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
